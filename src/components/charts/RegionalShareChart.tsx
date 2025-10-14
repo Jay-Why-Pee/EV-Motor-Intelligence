@@ -15,6 +15,7 @@ export const RegionalShareChart = () => {
       <div className="mb-6">
         <h3 className="text-lg md:text-xl font-bold mb-2">지역별 시장 점유율</h3>
         <p className="text-sm text-muted-foreground">2024년 기준 (%)</p>
+        <p className="text-xs text-muted-foreground/70 mt-1">출처: International Energy Agency (IEA), Bloomberg NEF (2024)</p>
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <PieChart>

@@ -19,6 +19,7 @@ export const MarketSizeChart = () => {
       <div className="mb-6">
         <h3 className="text-lg md:text-xl font-bold mb-2">글로벌 EV 모터 시장 규모</h3>
         <p className="text-sm text-muted-foreground">단위: 십억 달러 (Billion USD)</p>
+        <p className="text-xs text-muted-foreground/70 mt-1">출처: Markets and Markets, Allied Market Research (2024)</p>
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={data}>

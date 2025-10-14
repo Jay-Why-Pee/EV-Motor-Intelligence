@@ -14,6 +14,7 @@ export const TechnologyTrendChart = () => {
       <div className="mb-6">
         <h3 className="text-lg md:text-xl font-bold mb-2">모터 기술별 트렌드</h3>
         <p className="text-sm text-muted-foreground">채택률 vs 성장률</p>
+        <p className="text-xs text-muted-foreground/70 mt-1">출처: Automotive News, McKinsey EV Battery Report (2024)</p>
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data}>
