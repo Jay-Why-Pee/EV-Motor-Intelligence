@@ -68,7 +68,7 @@ serve(async (req) => {
           { role: 'user', content: `다음은 최근 ${newsData.length}개의 전기차 모터 관련 뉴스입니다:\n\n${newsSummary}\n\n이 뉴스들을 종합적으로 분석하여 우리 회사(모터 제조사)가 나아가야 할 전략적 방향을 제시해주세요.` }
         ],
         temperature: 0.7,
-        max_tokens: 2000,
+        max_tokens: 4000,
       }),
     });
 

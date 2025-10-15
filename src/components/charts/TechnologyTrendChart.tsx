@@ -10,12 +10,18 @@ const data = [
 
 export const TechnologyTrendChart = () => {
   return (
-    <Card className="p-4 md:p-6 card-glow">
-      <div className="mb-6">
-        <h3 className="text-lg md:text-xl font-bold mb-2">모터 기술별 트렌드</h3>
-        <p className="text-sm text-muted-foreground">채택률 vs 성장률</p>
-        <p className="text-xs text-muted-foreground/70 mt-1">출처: Automotive News, McKinsey EV Battery Report (2024)</p>
-      </div>
+    <a 
+      href="https://www.mckinsey.com/industries/automotive-and-assembly/our-insights/battery-2030-resilient-sustainable-and-circular" 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="block transition-transform hover:scale-[1.02]"
+    >
+      <Card className="p-4 md:p-6 card-glow cursor-pointer hover:border-primary/50">
+        <div className="mb-6">
+          <h3 className="text-lg md:text-xl font-bold mb-2">모터 기술별 트렌드</h3>
+          <p className="text-sm text-muted-foreground">채택률 vs 성장률</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">출처: Automotive News, McKinsey EV Battery Report (2024)</p>
+        </div>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -44,6 +50,7 @@ export const TechnologyTrendChart = () => {
           <Bar dataKey="growth" fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
-    </Card>
+      </Card>
+    </a>
   );
 };

@@ -85,7 +85,7 @@ export const InsightsSection = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Lightbulb className="w-6 h-6 text-chart-3" />
-          <h2 className="text-2xl font-bold">AI 시장 인사이트</h2>
+          <h2 className="text-2xl font-bold">인사이트 (상기 뉴스 기반)</h2>
         </div>
         <Button
           onClick={generateInsight}

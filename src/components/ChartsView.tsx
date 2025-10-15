@@ -15,6 +15,8 @@ export const ChartsView = () => {
           change="+18.3%"
           icon={Globe}
           trend="up"
+          source="Markets and Markets (2024)"
+          sourceUrl="https://www.marketsandmarkets.com/Market-Reports/electric-vehicle-market-209371461.html"
         />
         <KPICard
           title="연간 성장률 (CAGR)"
@@ -22,6 +24,8 @@ export const ChartsView = () => {
           change="+2.1%"
           icon={TrendingUp}
           trend="up"
+          source="Grand View Research (2024)"
+          sourceUrl="https://www.grandviewresearch.com/industry-analysis/electric-vehicle-market"
         />
         <KPICard
           title="주요 제조사"
@@ -29,6 +33,8 @@ export const ChartsView = () => {
           change="+15"
           icon={Users}
           trend="up"
+          source="EV Database (2024)"
+          sourceUrl="https://ev-database.org/cheatsheet/electric-vehicle-manufacturers"
         />
         <KPICard
           title="기술 혁신 지수"
@@ -36,6 +42,8 @@ export const ChartsView = () => {
           change="+0.4"
           icon={Zap}
           trend="up"
+          source="McKinsey & Company (2024)"
+          sourceUrl="https://www.mckinsey.com/industries/automotive-and-assembly/our-insights"
         />
       </div>
 

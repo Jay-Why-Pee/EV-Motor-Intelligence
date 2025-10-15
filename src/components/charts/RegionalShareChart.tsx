@@ -11,12 +11,18 @@ const data = [
 
 export const RegionalShareChart = () => {
   return (
-    <Card className="p-4 md:p-6 card-glow">
-      <div className="mb-6">
-        <h3 className="text-lg md:text-xl font-bold mb-2">지역별 시장 점유율</h3>
-        <p className="text-sm text-muted-foreground">2024년 기준 (%)</p>
-        <p className="text-xs text-muted-foreground/70 mt-1">출처: International Energy Agency (IEA), Bloomberg NEF (2024)</p>
-      </div>
+    <a 
+      href="https://www.iea.org/reports/global-ev-outlook-2024" 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="block transition-transform hover:scale-[1.02]"
+    >
+      <Card className="p-4 md:p-6 card-glow cursor-pointer hover:border-primary/50">
+        <div className="mb-6">
+          <h3 className="text-lg md:text-xl font-bold mb-2">지역별 시장 점유율</h3>
+          <p className="text-sm text-muted-foreground">2024년 기준 (%)</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">출처: International Energy Agency (IEA), Bloomberg NEF (2024)</p>
+        </div>
       <ResponsiveContainer width="100%" height={300}>
         <PieChart>
           <Pie
@@ -48,6 +54,7 @@ export const RegionalShareChart = () => {
           />
         </PieChart>
       </ResponsiveContainer>
-    </Card>
+      </Card>
+    </a>
   );
 };
