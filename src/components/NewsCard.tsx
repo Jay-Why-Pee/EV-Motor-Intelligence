@@ -5,7 +5,7 @@ import { Badge } from "./ui/badge";
 interface NewsCardProps {
   title: string;
   summary: string;
-  category: "breaking" | "tech" | "market" | "korea";
+  category: "breaking" | "tech" | "market" | "korea" | "other";
   source: string;
   date: string;
   url: string;
@@ -16,6 +16,7 @@ const categoryStyles = {
   tech: "bg-chart-3/20 text-chart-3 border-chart-3/30",
   market: "bg-chart-2/20 text-chart-2 border-chart-2/30",
   korea: "bg-chart-1/20 text-chart-1 border-chart-1/30",
+  other: "bg-muted/20 text-muted-foreground border-muted/30",
 };
 
 const categoryLabels = {
@@ -23,6 +24,7 @@ const categoryLabels = {
   tech: "기술",
   market: "시장",
   korea: "국내",
+  other: "기타",
 };
 
 export const NewsCard = ({ title, summary, category, source, date, url }: NewsCardProps) => {
