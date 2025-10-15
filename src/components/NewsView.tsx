@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { NewsCard } from "./NewsCard";
 import { Button } from "./ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { InsightsSection } from "./InsightsSection";
+import { useToast } from "@/hooks/use-toast";
 
 type Category = "all" | "breaking" | "tech" | "market" | "korea";
 
@@ -23,6 +24,8 @@ export const NewsView = () => {
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [displayCount, setDisplayCount] = useState(10);
+  const [crawling, setCrawling] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchNews();
@@ -43,6 +46,36 @@ export const NewsView = () => {
       console.error('Error fetching news:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const crawlNews = async () => {
+    try {
+      setCrawling(true);
+      toast({
+        title: "크롤링 시작",
+        description: "뉴스를 수집하고 있습니다...",
+      });
+
+      const { error } = await supabase.functions.invoke('crawl-news');
+
+      if (error) throw error;
+
+      toast({
+        title: "크롤링 완료",
+        description: "새로운 뉴스를 불러왔습니다.",
+      });
+
+      await fetchNews();
+    } catch (error) {
+      console.error('Error crawling news:', error);
+      toast({
+        title: "크롤링 실패",
+        description: "뉴스 수집 중 오류가 발생했습니다.",
+        variant: "destructive",
+      });
+    } finally {
+      setCrawling(false);
     }
   };
 
@@ -75,27 +108,47 @@ export const NewsView = () => {
 
   return (
     <div className="space-y-8">
-      {/* Filter Buttons */}
-      <div className="flex flex-wrap gap-2">
-        {categories.map(category => (
-          <Button
-            key={category.id}
-            variant={activeCategory === category.id ? "default" : "outline"}
-            onClick={() => {
-              setActiveCategory(category.id);
-              setDisplayCount(10);
-            }}
-            size="sm"
-            className="transition-all"
-          >
-            {category.label}
-            {activeCategory === category.id && (
-              <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-primary-foreground text-primary">
-                {category.id === "all" ? news.length : news.filter(n => n.category === category.id).length}
-              </span>
-            )}
-          </Button>
-        ))}
+      {/* Filter Buttons and Crawl Button */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-2 flex-1">
+          {categories.map(category => (
+            <Button
+              key={category.id}
+              variant={activeCategory === category.id ? "default" : "outline"}
+              onClick={() => {
+                setActiveCategory(category.id);
+                setDisplayCount(10);
+              }}
+              size="sm"
+              className="transition-all"
+            >
+              {category.label}
+              {activeCategory === category.id && (
+                <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-primary-foreground text-primary">
+                  {category.id === "all" ? news.length : news.filter(n => n.category === category.id).length}
+                </span>
+              )}
+            </Button>
+          ))}
+        </div>
+        <Button
+          onClick={crawlNews}
+          disabled={crawling}
+          variant="outline"
+          size="sm"
+        >
+          {crawling ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              수집중...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              뉴스 크롤링
+            </>
+          )}
+        </Button>
       </div>
 
       {/* News Grid */}
