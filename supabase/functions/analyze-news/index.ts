@@ -43,7 +43,19 @@ serve(async (req) => {
       `[${article.category}] ${article.title_kr}\n${article.summary}\n출처: ${article.source} (${article.date})`
     ).join('\n\n');
 
-    const systemPrompt = `당신은 전기차 모터 산업 전문가입니다. 뉴스 기사들을 분석하여 모터 제조 회사가 나아가야 할 방향에 대한 전략적 인사이트를 제공해주세요.
+    const systemPrompt = `당신은 전기차 모터 산업 전문가입니다. 뉴스 기사들을 분석하여 모터 제조 회사가 나아가야 할 방향에 대한 구조화된 인사이트를 JSON 형식으로 제공해주세요.
+
+응답은 반드시 다음 JSON 구조를 따라야 합니다:
+{
+  "summary": "전체 분석의 핵심 요약 (2-3문장)",
+  "keywords": ["키워드1", "키워드2", ...] (10-15개의 핵심 키워드),
+  "sections": [
+    {
+      "title": "섹션 제목",
+      "insights": ["인사이트1", "인사이트2", ...] (각 섹션당 3-5개의 구체적인 인사이트)
+    }
+  ]
+}
 
 다음 관점에서 분석해주세요:
 1. 시장 트렌드 및 경쟁 환경
@@ -52,7 +64,7 @@ serve(async (req) => {
 4. 공급망 및 제조 전략
 5. 향후 6-12개월 내 집중해야 할 핵심 영역
 
-분석은 한국어로 작성하되, 구체적이고 실행 가능한 인사이트를 제공해주세요.`;
+각 인사이트는 짧고 명확하게 작성하되, 구체적이고 실행 가능해야 합니다.`;
 
     // Call Lovable AI for analysis
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -65,8 +77,9 @@ serve(async (req) => {
         model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `다음은 최근 ${newsData.length}개의 전기차 모터 관련 뉴스입니다:\n\n${newsSummary}\n\n이 뉴스들을 종합적으로 분석하여 우리 회사(모터 제조사)가 나아가야 할 전략적 방향을 제시해주세요.` }
+          { role: 'user', content: `다음은 최근 ${newsData.length}개의 전기차 모터 관련 뉴스입니다:\n\n${newsSummary}\n\n이 뉴스들을 종합적으로 분석하여 우리 회사(모터 제조사)가 나아가야 할 전략적 방향을 JSON 형식으로 제시해주세요. 반드시 유효한 JSON만 응답해야 합니다.` }
         ],
+        response_format: { type: "json_object" },
         temperature: 0.7,
         max_tokens: 4000,
       }),

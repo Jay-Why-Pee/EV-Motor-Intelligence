@@ -5,6 +5,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Lightbulb, RefreshCw, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+interface InsightSection {
+  title: string;
+  insights: string[];
+}
+
+interface InsightContent {
+  summary: string;
+  keywords: string[];
+  sections: InsightSection[];
+}
+
 interface Insight {
   id: string;
   content: string;
@@ -14,6 +25,7 @@ interface Insight {
 
 export const InsightsSection = () => {
   const [insight, setInsight] = useState<Insight | null>(null);
+  const [parsedContent, setParsedContent] = useState<InsightContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
@@ -35,6 +47,16 @@ export const InsightsSection = () => {
       if (error && error.code !== 'PGRST116') throw error;
       
       setInsight(data);
+      
+      if (data?.content) {
+        try {
+          const parsed = JSON.parse(data.content);
+          setParsedContent(parsed);
+        } catch (e) {
+          console.error('Failed to parse insight content:', e);
+          setParsedContent(null);
+        }
+      }
     } catch (error) {
       console.error('Error fetching insight:', error);
     } finally {
@@ -107,16 +129,58 @@ export const InsightsSection = () => {
         </Button>
       </div>
 
-      {insight ? (
-        <Card className="p-6 card-glow">
-          <div className="prose prose-invert max-w-none">
+      {insight && parsedContent ? (
+        <div className="space-y-6">
+          <Card className="p-6 card-glow">
             <div className="text-sm text-muted-foreground mb-4">
               분석 시간: {new Date(insight.generated_at).toLocaleString('ko-KR')} | 
               분석 뉴스: {insight.news_analyzed_count}개
             </div>
-            <div className="whitespace-pre-wrap leading-relaxed">
-              {insight.content}
+            
+            <div className="mb-6 p-4 bg-primary/10 rounded-lg border border-primary/20">
+              <p className="text-lg leading-relaxed">{parsedContent.summary}</p>
             </div>
+
+            {parsedContent.sections.map((section, idx) => (
+              <div key={idx} className="mb-6">
+                <h3 className="text-xl font-semibold mb-3 text-primary">{section.title}</h3>
+                <ul className="space-y-2">
+                  {section.insights.map((insight, insightIdx) => (
+                    <li key={insightIdx} className="flex items-start gap-2">
+                      <span className="text-primary mt-1">•</span>
+                      <span className="flex-1 leading-relaxed">{insight}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <Lightbulb className="w-5 h-5 text-chart-3" />
+              핵심 키워드
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {parsedContent.keywords.map((keyword, idx) => (
+                <span
+                  key={idx}
+                  className="px-3 py-1.5 bg-primary/20 text-primary rounded-full text-sm font-medium border border-primary/30"
+                >
+                  {keyword}
+                </span>
+              ))}
+            </div>
+          </Card>
+        </div>
+      ) : insight ? (
+        <Card className="p-6 card-glow">
+          <div className="text-sm text-muted-foreground mb-4">
+            분석 시간: {new Date(insight.generated_at).toLocaleString('ko-KR')} | 
+            분석 뉴스: {insight.news_analyzed_count}개
+          </div>
+          <div className="whitespace-pre-wrap leading-relaxed">
+            {insight.content}
           </div>
         </Card>
       ) : (
