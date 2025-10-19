@@ -25,7 +25,7 @@ export const Header = () => {
           <div className="flex items-center gap-3 text-sm">
             <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30">
               <div className="w-2 h-2 rounded-full bg-primary pulse-dot" />
-              <span className="text-primary font-medium">실시간 업데이트</span>
+              <span className="text-primary font-medium">매일 한국시간 오전 6시 업데이트</span>
             </div>
             <div className="hidden md:flex items-center gap-2 text-muted-foreground">
               <Activity className="w-4 h-4" />
