@@ -130,23 +130,33 @@ serve(async (req) => {
       throw new Error("No articles were generated");
     }
 
+    console.log(`Total articles generated: ${allArticles.length}`);
+
     // Clear existing news
-    await supabase.from('news').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    const { error: deleteError } = await supabase.from('news').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError) {
+      console.error("Error deleting existing news:", deleteError);
+      throw deleteError;
+    }
+    console.log("Existing news cleared successfully");
 
     // Insert new news
     const { error: insertError } = await supabase
       .from('news')
       .insert(allArticles.map((article: any) => ({
-        title: article.title,
-        title_kr: article.title_kr,
-        summary: article.summary,
+        title: article.title || "Untitled",
+        title_kr: article.title_kr || "제목 없음",
+        summary: article.summary || "",
         category: article.category,
-        source: article.source,
-        date: article.date,
-        url: article.url,
+        source: article.source || "Unknown",
+        date: article.date || new Date().toISOString().split('T')[0],
+        url: article.url || "#",
       })));
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error("Error inserting news:", insertError);
+      throw insertError;
+    }
 
     console.log(`Successfully crawled and inserted ${allArticles.length} news articles across ${categories.length} categories`);
 
@@ -159,10 +169,12 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    console.error('Error in crawl-news function:', error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    console.error('Error in crawl-news function:', errorMessage);
+    const errorDetails = error instanceof Error ? error.stack : String(error);
+    console.error('Error details:', errorDetails);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: errorMessage, details: errorDetails }),
       { 
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
