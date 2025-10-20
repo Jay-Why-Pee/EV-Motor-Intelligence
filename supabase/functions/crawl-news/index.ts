@@ -28,6 +28,121 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Helper utilities for URL validation and normalization
+    const DEFAULT_UA = 'Mozilla/5.0 (compatible; LovableNewsBot/1.0; +https://lovable.dev)';
+
+    const normalizeUrl = (raw: string): string => {
+      try {
+        let u = (raw || '').trim();
+        if (!u) return '';
+        if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+        const url = new URL(u);
+        url.hash = '';
+        return url.toString();
+      } catch {
+        return '';
+      }
+    };
+
+    const fetchWithTimeout = async (input: string, init: RequestInit = {}, timeoutMs = 8000) => {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(input, {
+          ...init,
+          redirect: 'follow',
+          headers: {
+            'User-Agent': DEFAULT_UA,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,ko-KR,ko;q=0.8',
+            ...(init.headers || {}),
+          },
+          signal: controller.signal,
+        });
+        return res;
+      } finally {
+        clearTimeout(id);
+      }
+    };
+
+    const extractTitle = (html: string): string => {
+      const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      return m ? m[1].replace(/\s+/g, ' ').trim() : '';
+    };
+
+    const extractCanonical = (html: string): string | null => {
+      const m = html.match(/<link[^>]+rel=["']canonical["'][^>]+>/i);
+      if (!m) return null;
+      const href = m[0].match(/href=["']([^"']+)["']/i);
+      return href ? href[1] : null;
+    };
+
+    const isTitleMatch = (pageTitle: string, articleTitle: string): boolean => {
+      if (!pageTitle || !articleTitle) return false;
+      const a = pageTitle.toLowerCase();
+      const b = articleTitle.toLowerCase();
+      const tokens = b.split(/[^a-z0-9]+/i).filter(t => t.length >= 5);
+      const hits = tokens.filter(t => a.includes(t));
+      return hits.length >= Math.max(1, Math.ceil(tokens.length * 0.2));
+    };
+
+    const validateAndFixUrl = async (article: any) => {
+      const original = normalizeUrl(article.url);
+      if (!original) return null;
+      try {
+        // Try HEAD first
+        let res = await fetchWithTimeout(original, { method: 'HEAD' }, 6000);
+        if (res.status === 405 || res.status === 403) {
+          // Some sites reject HEAD
+          res = await fetchWithTimeout(original, { method: 'GET' }, 9000);
+        }
+        if (!res.ok && (res.status < 200 || res.status >= 400)) {
+          console.warn('URL HEAD/GET not ok', original, res.status);
+          return null;
+        }
+
+        let finalUrl = res.url || original;
+        let html = '';
+        // Fetch HTML
+        if (res.headers.get('content-type')?.includes('text/html')) {
+          try { html = await res.text(); } catch {}
+        }
+        if (!html) {
+          const gr = await fetchWithTimeout(finalUrl, { method: 'GET' }, 9000);
+          if (!gr.ok) return null;
+          html = await gr.text();
+          finalUrl = gr.url || finalUrl;
+        }
+
+        const canonical = extractCanonical(html);
+        const fixedUrl = normalizeUrl(canonical || finalUrl);
+        const pageTitle = extractTitle(html);
+        const ok = isTitleMatch(pageTitle, article.title || article.title_kr || '');
+        if (!ok) {
+          console.warn('Title mismatch - dropping', { fixedUrl, pageTitle, articleTitle: article.title });
+          return null;
+        }
+
+        return { ...article, url: fixedUrl };
+      } catch (e) {
+        console.warn('validateAndFixUrl error for', original, e);
+        return null;
+      }
+    };
+
+    const validateArticles = async (articles: any[]) => {
+      const results: any[] = [];
+      const batchSize = 5;
+      for (let i = 0; i < articles.length; i += batchSize) {
+        const batch = articles.slice(i, i + batchSize);
+        const validated = await Promise.all(batch.map(validateAndFixUrl));
+        for (const v of validated) if (v) results.push(v);
+        // tiny delay to be gentle with sites
+        await new Promise(r => setTimeout(r, 150));
+      }
+      return results;
+    };
+
     // Define all categories with their context
     const categories = [
       // Regions
@@ -57,24 +172,24 @@ serve(async (req) => {
     for (const category of categories) {
       console.log(`Generating ${category.count} articles for ${category.id}...`);
       
-      const prompt = `Generate ${category.count} unique and diverse news articles about ${category.context} in the global electric vehicle motors industry.
+      const prompt = `Generate ${category.count} news articles about ${category.context} ONLY from real, published sources within the last 30 days.
       
-      Return ONLY a valid JSON array with exactly ${category.count} articles, each having:
-      - title: English headline (unique and specific to ${category.id})
-      - title_kr: Korean translation of the title
-      - summary: 2-3 sentence summary in Korean about the news
+      Return ONLY a strict JSON array with exactly ${category.count} items. Each item must have:
+      - title: English headline copied verbatim from the source page
+      - title_kr: Natural Korean translation of the title
+      - summary: 2-3 sentence Korean summary based on the source article
       - category: "${category.id}"
-      - source: realistic news source name (e.g., Reuters, Bloomberg, TechCrunch, etc.)
-      - date: original publication date in YYYY-MM-DD format (vary dates within last 30 days)
-      - url: realistic news URL with proper domain
+      - source: publisher name (e.g., Reuters, Bloomberg, TechCrunch)
+      - date: YYYY-MM-DD from the article page (UTC)
+      - url: the exact canonical URL of the article (not the homepage, not a listing)
       
-      Make sure all articles are:
-      1. Completely different from each other
-      2. Specifically relevant to ${category.id}
-      3. Realistic and industry-appropriate
-      4. Have proper Korean summaries
+      Hard requirements:
+      - Do not fabricate URLs or sources.
+      - Only include articles with publicly accessible pages (HTTP 200).
+      - Prefer well-known publishers. Exclude paywalled content if not publicly viewable.
+      - No duplicates. Each URL must be unique.
       
-      Return ONLY the JSON array, no markdown formatting.`;
+      Return ONLY the JSON array, no markdown.`;
 
       try {
         const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -130,7 +245,14 @@ serve(async (req) => {
       throw new Error("No articles were generated");
     }
 
-    console.log(`Total articles generated: ${allArticles.length}`);
+    console.log(`Total AI articles generated: ${allArticles.length}`);
+
+    // Validate URLs and drop invalid ones
+    const validatedArticles = await validateArticles(allArticles);
+    console.log(`Validated articles: ${validatedArticles.length}, rejected: ${allArticles.length - validatedArticles.length}`);
+    if (validatedArticles.length === 0) {
+      throw new Error("No valid articles after URL validation");
+    }
 
     // Clear existing news
     const { error: deleteError } = await supabase.from('news').delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -140,10 +262,10 @@ serve(async (req) => {
     }
     console.log("Existing news cleared successfully");
 
-    // Insert new news
+    // Insert validated news only
     const { error: insertError } = await supabase
       .from('news')
-      .insert(allArticles.map((article: any) => ({
+      .insert(validatedArticles.map((article: any) => ({
         title: article.title || "Untitled",
         title_kr: article.title_kr || "제목 없음",
         summary: article.summary || "",
@@ -151,19 +273,21 @@ serve(async (req) => {
         source: article.source || "Unknown",
         date: article.date || new Date().toISOString().split('T')[0],
         url: article.url || "#",
-      })));
+      })) as any);
 
     if (insertError) {
       console.error("Error inserting news:", insertError);
       throw insertError;
     }
 
-    console.log(`Successfully crawled and inserted ${allArticles.length} news articles across ${categories.length} categories`);
+    console.log(`Inserted ${validatedArticles.length} validated news articles (rejected ${allArticles.length - validatedArticles.length}) across ${categories.length} categories`);
 
     return new Response(
       JSON.stringify({ 
-        success: true, 
-        count: allArticles.length,
+        success: true,
+        generated_count: allArticles.length,
+        validated_count: validatedArticles.length,
+        rejected_count: allArticles.length - validatedArticles.length,
         categories: categories.length
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
