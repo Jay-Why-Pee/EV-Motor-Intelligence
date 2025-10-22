@@ -44,17 +44,19 @@ serve(async (req) => {
       }
     };
 
-    const fetchWithTimeout = async (input: string, init: RequestInit = {}, timeoutMs = 8000) => {
+    const fetchWithTimeout = async (input: string, init: RequestInit = {}, timeoutMs = 12000) => {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const res = await fetch(input, {
-          ...init,
+          method: 'GET',
           redirect: 'follow',
+          cache: 'no-store' as RequestCache,
+          ...init,
           headers: {
             'User-Agent': DEFAULT_UA,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9,ko-KR,ko;q=0.8',
+            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
             ...(init.headers || {}),
           },
           signal: controller.signal,
@@ -67,7 +69,7 @@ serve(async (req) => {
 
     const extractTitle = (html: string): string => {
       const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-      return m ? m[1].replace(/\s+/g, ' ').trim() : '';
+      return m ? m[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : '';
     };
 
     const extractCanonical = (html: string): string | null => {
@@ -77,52 +79,73 @@ serve(async (req) => {
       return href ? href[1] : null;
     };
 
-    const isTitleMatch = (pageTitle: string, articleTitle: string): boolean => {
-      if (!pageTitle || !articleTitle) return false;
-      const a = pageTitle.toLowerCase();
-      const b = articleTitle.toLowerCase();
-      const tokens = b.split(/[^a-z0-9]+/i).filter(t => t.length >= 5);
-      const hits = tokens.filter(t => a.includes(t));
-      return hits.length >= Math.max(1, Math.ceil(tokens.length * 0.2));
+    const extractOgTitle = (html: string): string => {
+      const m = html.match(/<meta[^>]+property=["']og:title["'][^>]*>/i);
+      if (!m) return '';
+      const c = m[0].match(/content=["']([^"']+)["']/i);
+      return c ? c[1].trim() : '';
+    };
+
+    const extractH1 = (html: string): string => {
+      const m = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+      return m ? m[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : '';
+    };
+    const isTitleMatch = (pageTitle: string, ogTitle: string, h1: string, articleTitle: string): boolean => {
+      const ref = (ogTitle || h1 || pageTitle || '').toLowerCase();
+      const cand = (articleTitle || '').toLowerCase();
+      if (!ref || !cand) return false;
+      // quick containment check
+      if (ref.includes(cand) || cand.includes(ref)) return true;
+      const tokens = cand.split(/[^a-z0-9가-힣]+/i).filter(t => t.length >= 4);
+      const hits = tokens.filter(t => ref.includes(t));
+      return hits.length >= Math.max(1, Math.ceil(tokens.length * 0.15));
     };
 
     const validateAndFixUrl = async (article: any) => {
       const original = normalizeUrl(article.url);
       if (!original) return null;
       try {
-        // Try HEAD first
-        let res = await fetchWithTimeout(original, { method: 'HEAD' }, 6000);
-        if (res.status === 405 || res.status === 403) {
-          // Some sites reject HEAD
-          res = await fetchWithTimeout(original, { method: 'GET' }, 9000);
-        }
-        if (!res.ok && (res.status < 200 || res.status >= 400)) {
-          console.warn('URL HEAD/GET not ok', original, res.status);
+        // Always GET to avoid HEAD rejections
+        let res = await fetchWithTimeout(original, { method: 'GET' }, 12000);
+        if (!res.ok) {
+          console.warn('GET not ok', original, res.status);
           return null;
         }
+        const ct = res.headers.get('content-type') || '';
+        if (!/text\/html/i.test(ct)) return null;
 
         let finalUrl = res.url || original;
-        let html = '';
-        // Fetch HTML
-        if (res.headers.get('content-type')?.includes('text/html')) {
-          try { html = await res.text(); } catch {}
-        }
-        if (!html) {
-          const gr = await fetchWithTimeout(finalUrl, { method: 'GET' }, 9000);
-          if (!gr.ok) return null;
-          html = await gr.text();
-          finalUrl = gr.url || finalUrl;
+        let html = await res.text();
+
+        // Follow canonical once
+        const canonical = extractCanonical(html);
+        if (canonical) {
+          const cand = normalizeUrl(canonical);
+          if (cand && cand !== finalUrl) {
+            const cr = await fetchWithTimeout(cand, { method: 'GET' }, 12000);
+            if (!cr.ok || !(cr.headers.get('content-type') || '').includes('text/html')) return null;
+            finalUrl = cr.url || cand;
+            html = await cr.text();
+          }
         }
 
-        const canonical = extractCanonical(html);
-        const fixedUrl = normalizeUrl(canonical || finalUrl);
         const pageTitle = extractTitle(html);
-        const ok = isTitleMatch(pageTitle, article.title || article.title_kr || '');
-        if (!ok) {
-          console.warn('Title mismatch - dropping', { fixedUrl, pageTitle, articleTitle: article.title });
+        const ogTitle = extractOgTitle(html);
+        const h1 = extractH1(html);
+
+        const softTitle = (pageTitle || '').toLowerCase();
+        if (!softTitle || softTitle.includes('403') || softTitle.includes('404') || softTitle.includes('forbidden') || softTitle.includes('access denied')) {
+          console.warn('Soft 4xx detected - dropping', finalUrl, pageTitle);
           return null;
         }
 
+        const ok = isTitleMatch(pageTitle, ogTitle, h1, article.title || article.title_kr || '');
+        if (!ok) {
+          console.warn('Title mismatch - dropping', { finalUrl, pageTitle, ogTitle, h1, articleTitle: article.title });
+          return null;
+        }
+
+        const fixedUrl = normalizeUrl(finalUrl);
         return { ...article, url: fixedUrl };
       } catch (e) {
         console.warn('validateAndFixUrl error for', original, e);
@@ -172,7 +195,7 @@ serve(async (req) => {
     for (const category of categories) {
       console.log(`Generating ${category.count} articles for ${category.id}...`);
       
-      const prompt = `Generate ${category.count} news articles about ${category.context} ONLY from real, published sources within the last 30 days.
+      const prompt = `Generate ${category.count} news articles about ${category.context} ONLY from real, published sources within the last 7 days.
       
       Return ONLY a strict JSON array with exactly ${category.count} items. Each item must have:
       - title: English headline copied verbatim from the source page
@@ -185,8 +208,9 @@ serve(async (req) => {
       
       Hard requirements:
       - Do not fabricate URLs or sources.
-      - Only include articles with publicly accessible pages (HTTP 200).
-      - Prefer well-known publishers. Exclude paywalled content if not publicly viewable.
+      - Only include articles with publicly accessible pages (HTTP 200) and visible content.
+      - Exclude paywalled or blocked sources that require login or subscriptions.
+      - Avoid domains that frequently block bots or return 403/401 (e.g., caranddriver.com, reuters.com, bloomberg.com).
       - No duplicates. Each URL must be unique.
       
       Return ONLY the JSON array, no markdown.`;
@@ -254,39 +278,44 @@ serve(async (req) => {
       throw new Error("No valid articles after URL validation");
     }
 
-    // Clear existing news
-    const { error: deleteError } = await supabase.from('news').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError) {
-      console.error("Error deleting existing news:", deleteError);
-      throw deleteError;
-    }
-    console.log("Existing news cleared successfully");
+    // De-duplicate by URL and upsert to avoid data loss
+    const uniqueValidated = Array.from(new Map(validatedArticles.map((a: any) => [a.url, a])).values());
 
-    // Insert validated news only
-    const { error: insertError } = await supabase
+    const { error: upsertError } = await supabase
       .from('news')
-      .insert(validatedArticles.map((article: any) => ({
-        title: article.title || "Untitled",
-        title_kr: article.title_kr || "제목 없음",
-        summary: article.summary || "",
+      .upsert(uniqueValidated.map((article: any) => ({
+        title: article.title || 'Untitled',
+        title_kr: article.title_kr || '제목 없음',
+        summary: article.summary || '',
         category: article.category,
-        source: article.source || "Unknown",
+        source: article.source || 'Unknown',
         date: article.date || new Date().toISOString().split('T')[0],
-        url: article.url || "#",
-      })) as any);
+        url: article.url || '#',
+      })) as any, { onConflict: 'url' } as any);
 
-    if (insertError) {
-      console.error("Error inserting news:", insertError);
-      throw insertError;
+    if (upsertError) {
+      console.error('Error upserting news:', upsertError);
+      throw upsertError;
     }
 
-    console.log(`Inserted ${validatedArticles.length} validated news articles (rejected ${allArticles.length - validatedArticles.length}) across ${categories.length} categories`);
+    // Optional cleanup: remove very old news (> 60 days) to keep table fresh
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 60);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+    const { error: cleanupError } = await supabase
+      .from('news')
+      .delete()
+      .lt('date', cutoffStr);
+    if (cleanupError) console.warn('Cleanup old news failed:', cleanupError);
+
+    console.log(`Upserted ${uniqueValidated.length} validated news articles (rejected ${allArticles.length - validatedArticles.length}) across ${categories.length} categories`);
 
     return new Response(
       JSON.stringify({ 
         success: true,
         generated_count: allArticles.length,
         validated_count: validatedArticles.length,
+        upserted_count: uniqueValidated.length,
         rejected_count: allArticles.length - validatedArticles.length,
         categories: categories.length
       }),
