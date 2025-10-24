@@ -155,15 +155,22 @@ serve(async (req) => {
 
     const validateArticles = async (articles: any[]) => {
       const results: any[] = [];
+      const invalid: any[] = [];
       const batchSize = 5;
       for (let i = 0; i < articles.length; i += batchSize) {
         const batch = articles.slice(i, i + batchSize);
         const validated = await Promise.all(batch.map(validateAndFixUrl));
-        for (const v of validated) if (v) results.push(v);
+        for (let j = 0; j < validated.length; j++) {
+          if (validated[j]) {
+            results.push(validated[j]);
+          } else {
+            invalid.push(batch[j]);
+          }
+        }
         // tiny delay to be gentle with sites
         await new Promise(r => setTimeout(r, 150));
       }
-      return results;
+      return { valid: results, invalid };
     };
 
     // Define all categories with their context
@@ -271,15 +278,21 @@ serve(async (req) => {
 
     console.log(`Total AI articles generated: ${allArticles.length}`);
 
-    // Validate URLs and drop invalid ones
-    const validatedArticles = await validateArticles(allArticles);
-    console.log(`Validated articles: ${validatedArticles.length}, rejected: ${allArticles.length - validatedArticles.length}`);
-    if (validatedArticles.length === 0) {
-      throw new Error("No valid articles after URL validation");
+    // Validate URLs - keep both validated and invalid articles
+    const { valid, invalid } = await validateArticles(allArticles);
+    console.log(`Validated articles: ${valid.length}, unvalidated: ${invalid.length}`);
+    
+    // Use validated articles first, but if none exist, use unvalidated ones
+    const articlesToInsert = valid.length > 0 ? valid : invalid;
+    
+    if (articlesToInsert.length === 0) {
+      throw new Error("No articles to insert");
     }
 
+    console.log(`Inserting ${articlesToInsert.length} articles (${valid.length} validated, ${invalid.length} unvalidated)`);
+
     // De-duplicate by URL and upsert to avoid data loss
-    const uniqueValidated = Array.from(new Map(validatedArticles.map((a: any) => [a.url, a])).values());
+    const uniqueValidated = Array.from(new Map(articlesToInsert.map((a: any) => [a.url, a])).values());
 
     const { error: upsertError } = await supabase
       .from('news')
@@ -308,15 +321,15 @@ serve(async (req) => {
       .lt('date', cutoffStr);
     if (cleanupError) console.warn('Cleanup old news failed:', cleanupError);
 
-    console.log(`Upserted ${uniqueValidated.length} validated news articles (rejected ${allArticles.length - validatedArticles.length}) across ${categories.length} categories`);
+    console.log(`Upserted ${uniqueValidated.length} news articles (${valid.length} validated, ${invalid.length} unvalidated) across ${categories.length} categories`);
 
     return new Response(
       JSON.stringify({ 
         success: true,
         generated_count: allArticles.length,
-        validated_count: validatedArticles.length,
+        validated_count: valid.length,
+        unvalidated_count: invalid.length,
         upserted_count: uniqueValidated.length,
-        rejected_count: allArticles.length - validatedArticles.length,
         categories: categories.length
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
