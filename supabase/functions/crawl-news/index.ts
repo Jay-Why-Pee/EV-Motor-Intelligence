@@ -104,46 +104,113 @@ serve(async (req) => {
     const validateAndFixUrl = async (article: any) => {
       const original = normalizeUrl(article.url);
       if (!original) return null;
+
+      // Basic domain blocklist to avoid frequent paywalls/blocks
+      const blocked = [
+        "reuters.com",
+        "bloomberg.com",
+        "wsj.com",
+        "ft.com",
+        "nytimes.com",
+        "economist.com",
+        "caranddriver.com"
+      ];
       try {
-        // Always GET to avoid HEAD rejections
-        let res = await fetchWithTimeout(original, { method: 'GET' }, 12000);
-        if (!res.ok) {
-          console.warn('GET not ok', original, res.status);
-          return null;
-        }
-        const ct = res.headers.get('content-type') || '';
-        if (!/text\/html/i.test(ct)) return null;
+        const isBlocked = (u: string) => {
+          try {
+            const h = new URL(u).hostname.replace(/^www\./, "");
+            return blocked.some(d => h.endsWith(d));
+          } catch { return false; }
+        };
+        if (isBlocked(original)) return null;
 
-        let finalUrl = res.url || original;
-        let html = await res.text();
+        const getHtml = async (u: string) => {
+          const res = await fetchWithTimeout(u, { method: 'GET' }, 15000);
+          if (!res.ok) return null;
+          const ct = res.headers.get('content-type') || '';
+          if (!/text\/html/i.test(ct)) return null;
+          const html = await res.text();
+          return { url: res.url || u, html };
+        };
 
-        // Follow canonical once
-        const canonical = extractCanonical(html);
-        if (canonical) {
-          const cand = normalizeUrl(canonical);
-          if (cand && cand !== finalUrl) {
-            const cr = await fetchWithTimeout(cand, { method: 'GET' }, 12000);
-            if (!cr.ok || !(cr.headers.get('content-type') || '').includes('text/html')) return null;
-            finalUrl = cr.url || cand;
-            html = await cr.text();
+        const looksPaywalled = (html: string) => {
+          const s = html.toLowerCase();
+          return (
+            s.includes("paywall") ||
+            s.includes("subscribe to read") ||
+            s.includes("subscription required") ||
+            s.includes("meteredcontent") ||
+            s.includes("regwall") ||
+            s.includes("captcha") ||
+            s.includes("access denied")
+          );
+        };
+
+        const strictTitleOk = (html: string) => {
+          const pageTitle = extractTitle(html);
+          const ogTitle = extractOgTitle(html);
+          const h1 = extractH1(html);
+          const softTitle = (pageTitle || "").toLowerCase();
+          if (!softTitle || softTitle.includes('403') || softTitle.includes('404') || softTitle.includes('forbidden') || softTitle.includes('access denied')) {
+            return false;
+          }
+          return isTitleMatch(pageTitle, ogTitle, h1, article.title || article.title_kr || '');
+        };
+
+        const relaxedContentOk = (html: string) => {
+          if (looksPaywalled(html)) return false;
+          // require an <article> or a reasonably long <h1>
+          const hasArticle = /<article[\s>]/i.test(html);
+          const h1 = extractH1(html);
+          return hasArticle || (h1 && h1.length >= 10);
+        };
+
+        // 1) Try original
+        let first = await getHtml(original);
+        if (!first) return null;
+
+        // 2) Try canonical / og:url / amphtml variants and pick the first that passes strict checks
+        const extractHref = (re: RegExp, html: string) => {
+          const m = html.match(re);
+          if (!m) return null;
+          const h = m[0].match(/href=["']([^"']+)["']/i);
+          return h ? normalizeUrl(h[1]) : null;
+        };
+
+        const canonical = extractHref(/<link[^>]+rel=["']canonical["'][^>]*>/i, first.html);
+        const ogUrlMatch = first.html.match(/<meta[^>]+property=["']og:url["'][^>]*>/i);
+        const ogUrl = ogUrlMatch ? (ogUrlMatch[0].match(/content=["']([^"']+)["']/i)?.[1] || "") : "";
+        const ogUrlNorm = normalizeUrl(ogUrl);
+        const ampUrl = extractHref(/<link[^>]+rel=["']amphtml["'][^>]*>/i, first.html);
+
+        const candidates = [canonical, ogUrlNorm, ampUrl]
+          .filter(Boolean)
+          .map(u => u!)
+          .filter(u => !isBlocked(u));
+
+        let finalUrl = first.url;
+        let finalHtml = first.html;
+
+        for (const cand of candidates) {
+          if (cand === finalUrl) continue;
+          const next = await getHtml(cand);
+          if (!next) continue;
+          if (strictTitleOk(next.html)) {
+            finalUrl = next.url;
+            finalHtml = next.html;
+            break;
           }
         }
 
-        const pageTitle = extractTitle(html);
-        const ogTitle = extractOgTitle(html);
-        const h1 = extractH1(html);
-
-        const softTitle = (pageTitle || '').toLowerCase();
-        if (!softTitle || softTitle.includes('403') || softTitle.includes('404') || softTitle.includes('forbidden') || softTitle.includes('access denied')) {
-          console.warn('Soft 4xx detected - dropping', finalUrl, pageTitle);
-          return null;
+        // If strict failed for all, allow a relaxed pass on the best available (prefer canonical if fetched)
+        if (!strictTitleOk(finalHtml)) {
+          // try relaxed on current html
+          if (!relaxedContentOk(finalHtml)) {
+            return null;
+          }
         }
 
-        const ok = isTitleMatch(pageTitle, ogTitle, h1, article.title || article.title_kr || '');
-        if (!ok) {
-          console.warn('Title mismatch - dropping', { finalUrl, pageTitle, ogTitle, h1, articleTitle: article.title });
-          return null;
-        }
+        if (looksPaywalled(finalHtml)) return null;
 
         const fixedUrl = normalizeUrl(finalUrl);
         return { ...article, url: fixedUrl };
@@ -202,23 +269,24 @@ serve(async (req) => {
     for (const category of categories) {
       console.log(`Generating ${category.count} articles for ${category.id}...`);
       
-      const prompt = `Generate ${category.count} news articles about ${category.context} ONLY from real, published sources within the last 7 days.
+      const prompt = `Generate ${category.count} news articles about ${category.context} from real, publicly accessible sources within the last 7 days.
       
       Return ONLY a strict JSON array with exactly ${category.count} items. Each item must have:
       - title: English headline copied verbatim from the source page
       - title_kr: Natural Korean translation of the title
       - summary: 2-3 sentence Korean summary based on the source article
       - category: "${category.id}"
-      - source: publisher name (e.g., Reuters, Bloomberg, TechCrunch)
+      - source: publisher name (e.g., Electrek, InsideEVs, The Verge, TechCrunch, Autoevolution)
       - date: YYYY-MM-DD from the article page (UTC)
-      - url: the exact canonical URL of the article (not the homepage, not a listing)
+      - url: the exact FINAL article URL that is publicly accessible (canonical or og:url). Do NOT return homepages or listing pages.
       
       Hard requirements:
-      - Do not fabricate URLs or sources.
-      - Only include articles with publicly accessible pages (HTTP 200) and visible content.
-      - Exclude paywalled or blocked sources that require login or subscriptions.
-      - Avoid domains that frequently block bots or return 403/401 (e.g., caranddriver.com, reuters.com, bloomberg.com).
+      - Do not fabricate URLs or sources under any circumstance.
+      - Only include articles with publicly accessible pages (HTTP 200) and visible content without login/subscription/region walls.
+      - Prefer official company newsrooms, press releases, and open-access tech/auto media.
+      - Strictly avoid domains that frequently block or paywall: reuters.com, bloomberg.com, wsj.com, ft.com, nytimes.com, economist.com, caranddriver.com.
       - No duplicates. Each URL must be unique.
+      - If a candidate is blocked or paywalled, replace it with an alternative that is open-access.
       
       Return ONLY the JSON array, no markdown.`;
 
@@ -278,21 +346,18 @@ serve(async (req) => {
 
     console.log(`Total AI articles generated: ${allArticles.length}`);
 
-    // Validate URLs - keep both validated and invalid articles
+    // Validate URLs - keep both validated and invalid articles for logging only
     const { valid, invalid } = await validateArticles(allArticles);
-    console.log(`Validated articles: ${valid.length}, unvalidated: ${invalid.length}`);
+    console.log(`Validated articles: ${valid.length}, rejected: ${invalid.length}`);
     
-    // Use validated articles first, but if none exist, use unvalidated ones
-    const articlesToInsert = valid.length > 0 ? valid : invalid;
-    
-    if (articlesToInsert.length === 0) {
-      throw new Error("No articles to insert");
+    if (valid.length === 0) {
+      throw new Error("No valid articles after URL validation");
     }
 
-    console.log(`Inserting ${articlesToInsert.length} articles (${valid.length} validated, ${invalid.length} unvalidated)`);
+    console.log(`Inserting ${valid.length} validated articles`);
 
-    // De-duplicate by URL and upsert to avoid data loss
-    const uniqueValidated = Array.from(new Map(articlesToInsert.map((a: any) => [a.url, a])).values());
+    // De-duplicate by URL and upsert
+    const uniqueValidated = Array.from(new Map(valid.map((a: any) => [a.url, a])).values());
 
     const { error: upsertError } = await supabase
       .from('news')
