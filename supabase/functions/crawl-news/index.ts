@@ -14,10 +14,7 @@ serve(async (req) => {
   console.log("Starting news crawling process...");
   
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY not found");
-    }
+    // Using public RSS sources and open-access feeds; AI key not required here
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -106,15 +103,20 @@ serve(async (req) => {
       if (!original) return null;
 
       // Basic domain blocklist to avoid frequent paywalls/blocks
-      const blocked = [
-        "reuters.com",
-        "bloomberg.com",
-        "wsj.com",
-        "ft.com",
-        "nytimes.com",
-        "economist.com",
-        "caranddriver.com"
-      ];
+        const blocked = [
+          "reuters.com",
+          "bloomberg.com",
+          "wsj.com",
+          "ft.com",
+          "nytimes.com",
+          "economist.com",
+          "caranddriver.com",
+          "autonews.com",
+          "forbes.com",
+          "washingtonpost.com",
+          "greencarcongress.com",
+          "recyclingmagazine.com"
+        ];
       try {
         const isBlocked = (u: string) => {
           try {
@@ -344,7 +346,7 @@ serve(async (req) => {
       throw new Error("No articles were generated");
     }
 
-    console.log(`Total AI articles generated: ${allArticles.length}`);
+    console.log(`Total articles collected from feeds: ${allArticles.length}`);
 
     // Validate URLs - keep both validated and invalid articles for logging only
     const { valid, invalid } = await validateArticles(allArticles);
