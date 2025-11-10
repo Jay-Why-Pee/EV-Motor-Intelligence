@@ -242,102 +242,98 @@ serve(async (req) => {
       return { valid: results, invalid };
     };
 
-    // Define all categories with their context
-    const categories = [
-      // Regions
-      { id: "아시아", context: "Asian EV motor market developments", count: 5 },
-      { id: "유럽", context: "European EV motor market developments", count: 5 },
-      { id: "북미", context: "North American EV motor market developments", count: 5 },
-      { id: "중국", context: "Chinese EV motor market developments", count: 5 },
-      // Customers - OEMs
-      { id: "GM", context: "GM electric vehicle motor news and developments", count: 5 },
-      { id: "Ford", context: "Ford electric vehicle motor news and developments", count: 5 },
-      { id: "벤츠", context: "Mercedes-Benz electric vehicle motor news and developments", count: 5 },
-      { id: "BMW", context: "BMW electric vehicle motor news and developments", count: 5 },
-      { id: "폭스바겐", context: "Volkswagen electric vehicle motor news and developments", count: 5 },
-      { id: "Honda", context: "Honda electric vehicle motor news and developments", count: 5 },
-      { id: "현대", context: "Hyundai/Kia electric vehicle motor news and developments", count: 5 },
-      // Motor manufacturers
-      { id: "Bosch", context: "Bosch electric motor manufacturing and technology", count: 5 },
-      { id: "ZF", context: "ZF electric motor manufacturing and technology", count: 5 },
-      { id: "Schaeffler", context: "Schaeffler electric motor manufacturing and technology", count: 5 },
-      { id: "LG마그나", context: "LG Magna electric motor manufacturing and partnerships", count: 5 },
-      { id: "기타", context: "Other electric motor suppliers and technology providers", count: 5 },
+    // Parse RSS feed and extract articles
+    const parseRssItems = (xml: string, defaultCategory: string, defaultSource: string) => {
+      const items: any[] = [];
+      const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+      let match;
+      
+      while ((match = itemRegex.exec(xml)) !== null) {
+        const itemXml = match[1];
+        
+        const extractTag = (tag: string) => {
+          const regex = new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>|<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
+          const m = itemXml.match(regex);
+          return m ? (m[1] || m[2] || '').trim() : '';
+        };
+        
+        const title = extractTag('title');
+        const link = extractTag('link');
+        const pubDate = extractTag('pubDate');
+        const description = extractTag('description');
+        
+        if (title && link) {
+          // Parse date
+          let formattedDate = new Date().toISOString().split('T')[0];
+          if (pubDate) {
+            try {
+              formattedDate = new Date(pubDate).toISOString().split('T')[0];
+            } catch (e) {
+              console.warn('Failed to parse date:', pubDate);
+            }
+          }
+          
+          items.push({
+            title,
+            title_kr: title, // Will be same as title since no AI translation
+            summary: description || title,
+            category: defaultCategory,
+            source: defaultSource,
+            date: formattedDate,
+            url: link,
+          });
+        }
+      }
+      
+      return items;
+    };
+
+    // Define RSS feeds to crawl
+    const feeds = [
+      // Google News RSS for Korean EV motor news
+      { url: 'https://news.google.com/rss/search?q=전기차+모터+when:7d&hl=ko&gl=KR&ceid=KR:ko', category: '아시아', source: 'Google News KR' },
+      // Google News RSS for US EV motor news
+      { url: 'https://news.google.com/rss/search?q=electric+vehicle+motor+when:7d&hl=en-US&gl=US&ceid=US:en', category: '북미', source: 'Google News US' },
+      // Google News for Korean EV Association
+      { url: 'https://news.google.com/rss/search?q=site:keva.or.kr+when:30d&hl=ko&gl=KR&ceid=KR:ko', category: '기타', source: 'KEVA' },
+      // Electrek EV RSS
+      { url: 'https://electrek.co/guides/electric-vehicles/feed/', category: '기타', source: 'Electrek' },
+      // InsideEVs RSS
+      { url: 'https://insideevs.com/news/feed/', category: '기타', source: 'InsideEVs' },
     ];
 
     const allArticles = [];
+    const seenUrls = new Set();
 
-    // Generate articles for each category
-    for (const category of categories) {
-      console.log(`Generating ${category.count} articles for ${category.id}...`);
+    // Fetch and parse each RSS feed
+    for (const feed of feeds) {
+      console.log(`Fetching RSS feed: ${feed.source}...`);
       
-      const prompt = `Generate ${category.count} news articles about ${category.context} from real, publicly accessible sources within the last 7 days.
-      
-      Return ONLY a strict JSON array with exactly ${category.count} items. Each item must have:
-      - title: English headline copied verbatim from the source page
-      - title_kr: Natural Korean translation of the title
-      - summary: 2-3 sentence Korean summary based on the source article
-      - category: "${category.id}"
-      - source: publisher name (e.g., Electrek, InsideEVs, The Verge, TechCrunch, Autoevolution)
-      - date: YYYY-MM-DD from the article page (UTC)
-      - url: the exact FINAL article URL that is publicly accessible (canonical or og:url). Do NOT return homepages or listing pages.
-      
-      Hard requirements:
-      - Do not fabricate URLs or sources under any circumstance.
-      - Only include articles with publicly accessible pages (HTTP 200) and visible content without login/subscription/region walls.
-      - Prefer official company newsrooms, press releases, and open-access tech/auto media.
-      - Strictly avoid domains that frequently block or paywall: reuters.com, bloomberg.com, wsj.com, ft.com, nytimes.com, economist.com, caranddriver.com.
-      - No duplicates. Each URL must be unique.
-      - If a candidate is blocked or paywalled, replace it with an alternative that is open-access.
-      
-      Return ONLY the JSON array, no markdown.`;
-
       try {
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              { role: "system", content: "You are a news content generator. Always respond with valid JSON array only, without any markdown formatting." },
-              { role: "user", content: prompt }
-            ],
-            max_tokens: 2000,
-          }),
-        });
-
-        if (!aiResponse.ok) {
-          console.error(`AI gateway error for ${category.id}: ${aiResponse.status}`);
-          if (aiResponse.status === 429) {
-            console.error("Rate limit exceeded, waiting before retry...");
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            continue;
-          }
+        const response = await fetchWithTimeout(feed.url, {}, 15000);
+        if (!response.ok) {
+          console.error(`Failed to fetch ${feed.source}: ${response.status}`);
           continue;
         }
-
-        const aiData = await aiResponse.json();
-        const content = aiData.choices[0].message.content;
         
-        // Extract JSON from markdown code blocks if present
-        let jsonContent = content;
-        if (content.includes("```json")) {
-          jsonContent = content.split("```json")[1].split("```")[0].trim();
-        } else if (content.includes("```")) {
-          jsonContent = content.split("```")[1].split("```")[0].trim();
+        const xml = await response.text();
+        const items = parseRssItems(xml, feed.category, feed.source);
+        
+        console.log(`Found ${items.length} items in ${feed.source}`);
+        
+        // Add unique items to allArticles
+        for (const item of items) {
+          const normalizedUrl = normalizeUrl(item.url);
+          if (normalizedUrl && !seenUrls.has(normalizedUrl)) {
+            seenUrls.add(normalizedUrl);
+            allArticles.push({ ...item, url: normalizedUrl });
+          }
         }
         
-        const categoryArticles = JSON.parse(jsonContent);
-        allArticles.push(...categoryArticles);
-        console.log(`Successfully generated ${categoryArticles.length} articles for ${category.id}`);
-        
-        // Small delay between requests to avoid rate limits
+        // Small delay between feeds
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch (error) {
-        console.error(`Error generating articles for ${category.id}:`, error);
+        console.error(`Error fetching ${feed.source}:`, error);
         continue;
       }
     }
@@ -388,16 +384,15 @@ serve(async (req) => {
       .lt('date', cutoffStr);
     if (cleanupError) console.warn('Cleanup old news failed:', cleanupError);
 
-    console.log(`Upserted ${uniqueValidated.length} news articles (${valid.length} validated, ${invalid.length} unvalidated) across ${categories.length} categories`);
+    console.log(`Upserted ${uniqueValidated.length} news articles (${valid.length} validated, ${invalid.length} unvalidated)`);
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        generated_count: allArticles.length,
+        collected_count: allArticles.length,
         validated_count: valid.length,
-        unvalidated_count: invalid.length,
-        upserted_count: uniqueValidated.length,
-        categories: categories.length
+        invalid_count: invalid.length,
+        upserted_count: uniqueValidated.length
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
