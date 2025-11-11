@@ -22,7 +22,7 @@ export const NewsView = () => {
   const [activeCategory, setActiveCategory] = useState<Category>("all");
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [displayCount, setDisplayCount] = useState(10);
+  const [displayCount, setDisplayCount] = useState(20);
   const [crawling, setCrawling] = useState(false);
   const { toast } = useToast();
 
@@ -144,7 +144,7 @@ export const NewsView = () => {
                       variant={activeCategory === category.id ? "default" : "outline"}
                       onClick={() => {
                         setActiveCategory(category.id);
-                        setDisplayCount(10);
+                        setDisplayCount(20);
                       }}
                       size="sm"
                       className="transition-all"

@@ -92,7 +92,10 @@ serve(async (req) => {
     }
 
     const aiData = await aiResponse.json();
-    const analysisContent = aiData.choices[0].message.content;
+    let analysisContent = aiData.choices[0].message.content;
+    
+    // Remove markdown code blocks if present (```json ... ```)
+    analysisContent = analysisContent.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
 
     // Delete old insights (keep only the most recent)
     const { error: deleteError } = await supabase

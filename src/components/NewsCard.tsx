@@ -4,6 +4,7 @@ import { Badge } from "./ui/badge";
 
 interface NewsCardProps {
   title: string;
+  title_kr: string;
   summary: string;
   category: string;
   source: string;
@@ -11,7 +12,7 @@ interface NewsCardProps {
   url: string;
 }
 
-export const NewsCard = ({ title, summary, category, source, date, url }: NewsCardProps) => {
+export const NewsCard = ({ title_kr, summary, category, source, date, url }: NewsCardProps) => {
   // Use category as label directly, fallback to "기타" if not available
   const categoryLabel = category || "기타";
   
@@ -31,7 +32,7 @@ export const NewsCard = ({ title, summary, category, source, date, url }: NewsCa
         </div>
         
         <h3 className="font-bold text-lg mb-3 line-clamp-2 group-hover:text-primary transition-colors">
-          {title}
+          {title_kr}
         </h3>
         
         <p className="text-sm text-muted-foreground mb-4 line-clamp-3 flex-grow">

@@ -50,7 +50,9 @@ export const InsightsSection = () => {
       
       if (data?.content) {
         try {
-          const parsed = JSON.parse(data.content);
+          // Remove markdown code blocks if present (```json ... ```)
+          let cleanContent = data.content.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
+          const parsed = JSON.parse(cleanContent);
           setParsedContent(parsed);
         } catch (e) {
           console.error('Failed to parse insight content:', e);
