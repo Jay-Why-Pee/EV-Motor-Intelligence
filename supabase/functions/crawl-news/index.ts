@@ -126,96 +126,24 @@ serve(async (req) => {
         };
         if (isBlocked(original)) return null;
 
-        const getHtml = async (u: string) => {
-          const res = await fetchWithTimeout(u, { method: 'GET' }, 15000);
-          if (!res.ok) return null;
-          const ct = res.headers.get('content-type') || '';
-          if (!/text\/html/i.test(ct)) return null;
-          const html = await res.text();
-          return { url: res.url || u, html };
-        };
-
-        const looksPaywalled = (html: string) => {
-          const s = html.toLowerCase();
-          return (
-            s.includes("paywall") ||
-            s.includes("subscribe to read") ||
-            s.includes("subscription required") ||
-            s.includes("meteredcontent") ||
-            s.includes("regwall") ||
-            s.includes("captcha") ||
-            s.includes("access denied")
-          );
-        };
-
-        const strictTitleOk = (html: string) => {
-          const pageTitle = extractTitle(html);
-          const ogTitle = extractOgTitle(html);
-          const h1 = extractH1(html);
-          const softTitle = (pageTitle || "").toLowerCase();
-          if (!softTitle || softTitle.includes('403') || softTitle.includes('404') || softTitle.includes('forbidden') || softTitle.includes('access denied')) {
-            return false;
+        // Lightweight reachability check: HEAD then GET (no body read)
+        const isReachable = async (u: string) => {
+          const tryHead = await fetchWithTimeout(u, { method: 'HEAD' }, 4000).catch(() => null as any);
+          if (tryHead && tryHead.ok) {
+            const ct = tryHead.headers.get('content-type') || '';
+            if (/text\/html/i.test(ct) || ct === '') return true;
           }
-          return isTitleMatch(pageTitle, ogTitle, h1, article.title || article.title_kr || '');
+          const tryGet = await fetchWithTimeout(u, { method: 'GET' }, 5000).catch(() => null as any);
+          if (!tryGet) return false;
+          if (!tryGet.ok) return false;
+          const ct2 = tryGet.headers.get('content-type') || '';
+          return /text\/html/i.test(ct2);
         };
 
-        const relaxedContentOk = (html: string) => {
-          if (looksPaywalled(html)) return false;
-          // require an <article> or a reasonably long <h1>
-          const hasArticle = /<article[\s>]/i.test(html);
-          const h1 = extractH1(html);
-          return hasArticle || (h1 && h1.length >= 10);
-        };
+        const ok = await isReachable(original);
+        if (!ok) return null;
 
-        // 1) Try original
-        let first = await getHtml(original);
-        if (!first) return null;
-
-        // 2) Try canonical / og:url / amphtml variants and pick the first that passes strict checks
-        const extractHref = (re: RegExp, html: string) => {
-          const m = html.match(re);
-          if (!m) return null;
-          const h = m[0].match(/href=["']([^"']+)["']/i);
-          return h ? normalizeUrl(h[1]) : null;
-        };
-
-        const canonical = extractHref(/<link[^>]+rel=["']canonical["'][^>]*>/i, first.html);
-        const ogUrlMatch = first.html.match(/<meta[^>]+property=["']og:url["'][^>]*>/i);
-        const ogUrl = ogUrlMatch ? (ogUrlMatch[0].match(/content=["']([^"']+)["']/i)?.[1] || "") : "";
-        const ogUrlNorm = normalizeUrl(ogUrl);
-        const ampUrl = extractHref(/<link[^>]+rel=["']amphtml["'][^>]*>/i, first.html);
-
-        const candidates = [canonical, ogUrlNorm, ampUrl]
-          .filter(Boolean)
-          .map(u => u!)
-          .filter(u => !isBlocked(u));
-
-        let finalUrl = first.url;
-        let finalHtml = first.html;
-
-        for (const cand of candidates) {
-          if (cand === finalUrl) continue;
-          const next = await getHtml(cand);
-          if (!next) continue;
-          if (strictTitleOk(next.html)) {
-            finalUrl = next.url;
-            finalHtml = next.html;
-            break;
-          }
-        }
-
-        // If strict failed for all, allow a relaxed pass on the best available (prefer canonical if fetched)
-        if (!strictTitleOk(finalHtml)) {
-          // try relaxed on current html
-          if (!relaxedContentOk(finalHtml)) {
-            return null;
-          }
-        }
-
-        if (looksPaywalled(finalHtml)) return null;
-
-        const fixedUrl = normalizeUrl(finalUrl);
-        return { ...article, url: fixedUrl };
+        return { ...article, url: original };
       } catch (e) {
         console.warn('validateAndFixUrl error for', original, e);
         return null;
@@ -294,16 +222,17 @@ serve(async (req) => {
       { url: 'https://news.google.com/rss/search?q=전기차+모터+when:7d&hl=ko&gl=KR&ceid=KR:ko', category: '아시아', source: 'Google News KR' },
       // Google News RSS for US EV motor news
       { url: 'https://news.google.com/rss/search?q=electric+vehicle+motor+when:7d&hl=en-US&gl=US&ceid=US:en', category: '북미', source: 'Google News US' },
-      // Google News for Korean EV Association
+      // Google News for Korean EV Association (KEVA)
       { url: 'https://news.google.com/rss/search?q=site:keva.or.kr+when:30d&hl=ko&gl=KR&ceid=KR:ko', category: '기타', source: 'KEVA' },
-      // Electrek EV RSS
+      // Electrek EV RSS (open access)
       { url: 'https://electrek.co/guides/electric-vehicles/feed/', category: '기타', source: 'Electrek' },
-      // InsideEVs RSS
-      { url: 'https://insideevs.com/news/feed/', category: '기타', source: 'InsideEVs' },
+      // Note: Automotive News (autonews.com) is commonly paywalled and is blocked via domain list
     ];
 
     const allArticles = [];
     const seenUrls = new Set();
+    const MAX_PER_FEED = 30;
+    const GLOBAL_MAX = 120;
 
     // Fetch and parse each RSS feed
     for (const feed of feeds) {
@@ -317,9 +246,9 @@ serve(async (req) => {
         }
         
         const xml = await response.text();
-        const items = parseRssItems(xml, feed.category, feed.source);
+        const items = parseRssItems(xml, feed.category, feed.source).slice(0, MAX_PER_FEED);
         
-        console.log(`Found ${items.length} items in ${feed.source}`);
+        console.log(`Found ${items.length} items in ${feed.source} (limited to ${MAX_PER_FEED})`);
         
         // Add unique items to allArticles
         for (const item of items) {
@@ -327,11 +256,17 @@ serve(async (req) => {
           if (normalizedUrl && !seenUrls.has(normalizedUrl)) {
             seenUrls.add(normalizedUrl);
             allArticles.push({ ...item, url: normalizedUrl });
+            if (allArticles.length >= GLOBAL_MAX) {
+              console.log(`Reached global cap of ${GLOBAL_MAX} articles, stopping early.`);
+              break;
+            }
           }
         }
         
+        if (allArticles.length >= GLOBAL_MAX) break;
+        
         // Small delay between feeds
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
       } catch (error) {
         console.error(`Error fetching ${feed.source}:`, error);
         continue;
