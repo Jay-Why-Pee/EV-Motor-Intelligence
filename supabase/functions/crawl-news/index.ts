@@ -83,6 +83,37 @@ serve(async (req) => {
       return c ? c[1].trim() : '';
     };
 
+    const extractMetaDescription = (html: string): string => {
+      const og = html.match(/<meta[^>]+property=["']og:description["'][^>]*>/i);
+      let content = '';
+      if (og) {
+        const c = og[0].match(/content=["']([^"']+)["']/i);
+        if (c) content = c[1];
+      }
+      if (!content) {
+        const meta = html.match(/<meta[^>]+name=["']description["'][^>]*>/i);
+        if (meta) {
+          const c = meta[0].match(/content=["']([^"']+)["']/i);
+          if (c) content = c[1];
+        }
+      }
+      return content ? decodeHtml(stripHtml(content)).replace(/\s+/g, ' ').trim() : '';
+    };
+
+    const stripHtml = (s: string): string => s.replace(/<[^>]*>/g, '');
+    const decodeHtml = (s: string): string =>
+      s
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+
+    const clampSummary = (s: string, maxLen = 280): string => {
+      if (s.length <= maxLen) return s;
+      return s.slice(0, maxLen).replace(/\s+\S*$/, '') + '…';
+    };
+
     const extractH1 = (html: string): string => {
       const m = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
       return m ? m[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : '';
@@ -103,20 +134,21 @@ serve(async (req) => {
       if (!original) return null;
 
       // Basic domain blocklist to avoid frequent paywalls/blocks
-        const blocked = [
-          "reuters.com",
-          "bloomberg.com",
-          "wsj.com",
-          "ft.com",
-          "nytimes.com",
-          "economist.com",
-          "caranddriver.com",
-          "autonews.com",
-          "forbes.com",
-          "washingtonpost.com",
-          "greencarcongress.com",
-          "recyclingmagazine.com"
-        ];
+      const blocked = [
+        "reuters.com",
+        "bloomberg.com",
+        "wsj.com",
+        "ft.com",
+        "nytimes.com",
+        "economist.com",
+        "caranddriver.com",
+        "autonews.com",
+        "forbes.com",
+        "washingtonpost.com",
+        "greencarcongress.com",
+        "recyclingmagazine.com"
+      ];
+
       try {
         const isBlocked = (u: string) => {
           try {
@@ -126,24 +158,40 @@ serve(async (req) => {
         };
         if (isBlocked(original)) return null;
 
-        // Lightweight reachability check: HEAD then GET (no body read)
-        const isReachable = async (u: string) => {
-          const tryHead = await fetchWithTimeout(u, { method: 'HEAD' }, 4000).catch(() => null as any);
-          if (tryHead && tryHead.ok) {
-            const ct = tryHead.headers.get('content-type') || '';
-            if (/text\/html/i.test(ct) || ct === '') return true;
+        // Resolve redirects to original article and extract a short meta description
+        const res = await fetchWithTimeout(original, { method: 'GET' }, 8000).catch(() => null as any);
+        if (!res || !res.ok) return null;
+        const ct = res.headers.get('content-type') || '';
+        if (!/text\/html/i.test(ct)) return null;
+
+        // Final URL after redirects (avoid storing news.google.com redirector)
+        let finalUrl = res.url || original;
+        try {
+          const u = new URL(finalUrl);
+          if (u.hostname.endsWith('news.google.com')) {
+            // If still on Google, try one more follow (some environments keep url)
+            const follow = await fetchWithTimeout(original, { method: 'GET' }, 8000).catch(() => null as any);
+            if (follow && follow.ok && /text\/html/i.test(follow.headers.get('content-type') || '')) {
+              finalUrl = follow.url || finalUrl;
+            }
           }
-          const tryGet = await fetchWithTimeout(u, { method: 'GET' }, 5000).catch(() => null as any);
-          if (!tryGet) return false;
-          if (!tryGet.ok) return false;
-          const ct2 = tryGet.headers.get('content-type') || '';
-          return /text\/html/i.test(ct2);
-        };
+        } catch {}
 
-        const ok = await isReachable(original);
-        if (!ok) return null;
+        // Read HTML and extract meta description (keep it light)
+        const html = await res.text();
+        let summary = extractMetaDescription(html) || '';
+        if (!summary) {
+          const t = extractOgTitle(html) || extractTitle(html) || '';
+          summary = t && t !== article.title ? t : '';
+        }
+        if (!summary) {
+          // fallback to cleaned RSS description if provided
+          const cleaned = article.summary ? decodeHtml(stripHtml(article.summary)) : '';
+          summary = cleaned || article.title || '';
+        }
+        summary = clampSummary(summary, 260);
 
-        return { ...article, url: original };
+        return { ...article, url: finalUrl, summary };
       } catch (e) {
         console.warn('validateAndFixUrl error for', original, e);
         return null;
@@ -200,11 +248,15 @@ serve(async (req) => {
               console.warn('Failed to parse date:', pubDate);
             }
           }
+
+          // Clean summary from RSS (remove HTML/link wrappers)
+          const rawSummary = description || title;
+          const cleanedSummary = clampSummary(decodeHtml(stripHtml(rawSummary)), 260);
           
           items.push({
             title,
-            title_kr: title, // Will be same as title since no AI translation
-            summary: description || title,
+            title_kr: title, // same as title since no AI translation
+            summary: cleanedSummary,
             category: defaultCategory,
             source: defaultSource,
             date: formattedDate,
@@ -318,6 +370,13 @@ serve(async (req) => {
       .delete()
       .lt('date', cutoffStr);
     if (cleanupError) console.warn('Cleanup old news failed:', cleanupError);
+
+    // Remove aggregator URLs that cannot be opened directly
+    const { error: cleanupGoogleNews } = await supabase
+      .from('news')
+      .delete()
+      .ilike('url', '%news.google.com%');
+    if (cleanupGoogleNews) console.warn('Cleanup news.google.com links failed:', cleanupGoogleNews);
 
     console.log(`Upserted ${uniqueValidated.length} news articles (${valid.length} validated, ${invalid.length} unvalidated)`);
 
