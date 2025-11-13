@@ -94,8 +94,19 @@ serve(async (req) => {
     const aiData = await aiResponse.json();
     let analysisContent = aiData.choices[0].message.content;
     
-    // Remove markdown code blocks if present (```json ... ```)
-    analysisContent = analysisContent.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
+    // Remove markdown code blocks if present (```json ... ```) and normalize to pure JSON string
+    analysisContent = analysisContent.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+    try {
+      const parsed = JSON.parse(analysisContent);
+      analysisContent = JSON.stringify(parsed);
+    } catch {
+      const match = analysisContent.match(/{[\s\S]*}/);
+      if (match) {
+        try {
+          analysisContent = JSON.stringify(JSON.parse(match[0]));
+        } catch {}
+      }
+    }
 
     // Delete old insights (keep only the most recent)
     const { error: deleteError } = await supabase

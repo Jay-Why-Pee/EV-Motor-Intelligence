@@ -50,10 +50,17 @@ export const InsightsSection = () => {
       
       if (data?.content) {
         try {
-          // Remove markdown code blocks if present (```json ... ```)
-          let cleanContent = data.content.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
-          const parsed = JSON.parse(cleanContent);
-          setParsedContent(parsed);
+          // Remove markdown code blocks if present and parse robustly
+          let cleanContent = data.content.replace(/```[a-z]*\s*/gi, '').replace(/```/g, '').trim();
+          let parsed: InsightContent | null = null;
+          try {
+            parsed = JSON.parse(cleanContent);
+          } catch {
+            const match = cleanContent.match(/{[\s\S]*}/);
+            if (match) parsed = JSON.parse(match[0]);
+          }
+          if (parsed) setParsedContent(parsed);
+          else setParsedContent(null);
         } catch (e) {
           console.error('Failed to parse insight content:', e);
           setParsedContent(null);
@@ -181,8 +188,8 @@ export const InsightsSection = () => {
             분석 시간: {new Date(insight.generated_at).toLocaleString('ko-KR')} | 
             분석 뉴스: {insight.news_analyzed_count}개
           </div>
-          <div className="whitespace-pre-wrap leading-relaxed">
-            {insight.content}
+          <div className="text-sm text-muted-foreground">
+            인사이트 데이터를 해석하는 데 문제가 발생했습니다. 다시 생성 버튼을 눌러 재시도해주세요.
           </div>
         </Card>
       ) : (

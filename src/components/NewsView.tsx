@@ -66,6 +66,8 @@ export const NewsView = () => {
       });
 
       await fetchNews();
+      setActiveCategory("all");
+      setDisplayCount(30);
     } catch (error) {
       console.error('Error crawling news:', error);
       toast({

@@ -109,7 +109,7 @@ serve(async (req) => {
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'");
 
-    const clampSummary = (s: string, maxLen = 280): string => {
+    const clampSummary = (s: string, maxLen = 220): string => {
       if (s.length <= maxLen) return s;
       return s.slice(0, maxLen).replace(/\s+\S*$/, '') + '…';
     };
@@ -268,23 +268,18 @@ serve(async (req) => {
       return items;
     };
 
-    // Define RSS feeds to crawl
+    // Define RSS feeds to crawl (open-access sources only to avoid blocks)
     const feeds = [
-      // Google News RSS for Korean EV motor news
-      { url: 'https://news.google.com/rss/search?q=전기차+모터+when:7d&hl=ko&gl=KR&ceid=KR:ko', category: '아시아', source: 'Google News KR' },
-      // Google News RSS for US EV motor news
-      { url: 'https://news.google.com/rss/search?q=electric+vehicle+motor+when:7d&hl=en-US&gl=US&ceid=US:en', category: '북미', source: 'Google News US' },
-      // Google News for Korean EV Association (KEVA)
-      { url: 'https://news.google.com/rss/search?q=site:keva.or.kr+when:30d&hl=ko&gl=KR&ceid=KR:ko', category: '기타', source: 'KEVA' },
-      // Electrek EV RSS (open access)
       { url: 'https://electrek.co/guides/electric-vehicles/feed/', category: '기타', source: 'Electrek' },
-      // Note: Automotive News (autonews.com) is commonly paywalled and is blocked via domain list
+      { url: 'https://insideevs.com/rss', category: '북미', source: 'InsideEVs' },
+      { url: 'https://cleantechnica.com/category/transportation/electric-vehicles/feed/', category: '북미', source: 'CleanTechnica' },
+      { url: 'https://www.greencarreports.com/rss', category: '북미', source: 'Green Car Reports' },
     ];
 
     const allArticles = [];
     const seenUrls = new Set();
-    const MAX_PER_FEED = 30;
-    const GLOBAL_MAX = 120;
+    const MAX_PER_FEED = 25;
+    const GLOBAL_MAX = 100;
 
     // Fetch and parse each RSS feed
     for (const feed of feeds) {
@@ -371,12 +366,7 @@ serve(async (req) => {
       .lt('date', cutoffStr);
     if (cleanupError) console.warn('Cleanup old news failed:', cleanupError);
 
-    // Remove aggregator URLs that cannot be opened directly
-    const { error: cleanupGoogleNews } = await supabase
-      .from('news')
-      .delete()
-      .ilike('url', '%news.google.com%');
-    if (cleanupGoogleNews) console.warn('Cleanup news.google.com links failed:', cleanupGoogleNews);
+    // Aggregator cleanup no longer needed since we avoid Google News feeds
 
     console.log(`Upserted ${uniqueValidated.length} news articles (${valid.length} validated, ${invalid.length} unvalidated)`);
 
