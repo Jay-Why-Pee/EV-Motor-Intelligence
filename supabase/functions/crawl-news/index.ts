@@ -14,19 +14,17 @@ serve(async (req) => {
   console.log("Starting news crawling process...");
   
   try {
-    // Using public RSS sources and open-access feeds; AI key not required here
-
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error("Supabase credentials not found");
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !LOVABLE_API_KEY) {
+      throw new Error("Required credentials not found");
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Helper utilities for URL validation and normalization
-    const DEFAULT_UA = 'Mozilla/5.0 (compatible; LovableNewsBot/1.0; +https://lovable.dev)';
+    const DEFAULT_UA = 'Mozilla/5.0 (compatible; LovableNewsBot/1.0)';
 
     const normalizeUrl = (raw: string): string => {
       try {
@@ -36,9 +34,7 @@ serve(async (req) => {
         const url = new URL(u);
         url.hash = '';
         return url.toString();
-      } catch {
-        return '';
-      }
+      } catch { return ''; }
     };
 
     const fetchWithTimeout = async (input: string, init: RequestInit = {}, timeoutMs = 12000) => {
@@ -46,16 +42,8 @@ serve(async (req) => {
       const id = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const res = await fetch(input, {
-          method: 'GET',
-          redirect: 'follow',
-          cache: 'no-store' as RequestCache,
           ...init,
-          headers: {
-            'User-Agent': DEFAULT_UA,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-            ...(init.headers || {}),
-          },
+          headers: { 'User-Agent': DEFAULT_UA, ...(init.headers || {}) },
           signal: controller.signal,
         });
         return res;
@@ -64,23 +52,13 @@ serve(async (req) => {
       }
     };
 
-    const extractTitle = (html: string): string => {
-      const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-      return m ? m[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : '';
-    };
+    const stripHtml = (s: string): string => s.replace(/<[^>]*>/g, '');
+    const decodeHtml = (s: string): string =>
+      s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#039;/g, "'");
 
-    const extractCanonical = (html: string): string | null => {
-      const m = html.match(/<link[^>]+rel=["']canonical["'][^>]+>/i);
-      if (!m) return null;
-      const href = m[0].match(/href=["']([^"']+)["']/i);
-      return href ? href[1] : null;
-    };
-
-    const extractOgTitle = (html: string): string => {
-      const m = html.match(/<meta[^>]+property=["']og:title["'][^>]*>/i);
-      if (!m) return '';
-      const c = m[0].match(/content=["']([^"']+)["']/i);
-      return c ? c[1].trim() : '';
+    const clampSummary = (s: string, maxLen = 220): string => {
+      if (s.length <= maxLen) return s;
+      return s.slice(0, maxLen).slice(0, s.slice(0, maxLen).lastIndexOf(' ')) + '...';
     };
 
     const extractMetaDescription = (html: string): string => {
@@ -90,307 +68,213 @@ serve(async (req) => {
         const c = og[0].match(/content=["']([^"']+)["']/i);
         if (c) content = c[1];
       }
-      if (!content) {
-        const meta = html.match(/<meta[^>]+name=["']description["'][^>]*>/i);
-        if (meta) {
-          const c = meta[0].match(/content=["']([^"']+)["']/i);
-          if (c) content = c[1];
-        }
-      }
-      return content ? decodeHtml(stripHtml(content)).replace(/\s+/g, ' ').trim() : '';
-    };
-
-    const stripHtml = (s: string): string => s.replace(/<[^>]*>/g, '');
-    const decodeHtml = (s: string): string =>
-      s
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'");
-
-    const clampSummary = (s: string, maxLen = 220): string => {
-      if (s.length <= maxLen) return s;
-      return s.slice(0, maxLen).replace(/\s+\S*$/, '') + '…';
-    };
-
-    const extractH1 = (html: string): string => {
-      const m = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-      return m ? m[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : '';
-    };
-    const isTitleMatch = (pageTitle: string, ogTitle: string, h1: string, articleTitle: string): boolean => {
-      const ref = (ogTitle || h1 || pageTitle || '').toLowerCase();
-      const cand = (articleTitle || '').toLowerCase();
-      if (!ref || !cand) return false;
-      // quick containment check
-      if (ref.includes(cand) || cand.includes(ref)) return true;
-      const tokens = cand.split(/[^a-z0-9가-힣]+/i).filter(t => t.length >= 4);
-      const hits = tokens.filter(t => ref.includes(t));
-      return hits.length >= Math.max(1, Math.ceil(tokens.length * 0.15));
+      return content ? decodeHtml(stripHtml(content)).trim() : '';
     };
 
     const validateAndFixUrl = async (article: any) => {
       const original = normalizeUrl(article.url);
       if (!original) return null;
 
-      // Basic domain blocklist to avoid frequent paywalls/blocks
-      const blocked = [
-        "reuters.com",
-        "bloomberg.com",
-        "wsj.com",
-        "ft.com",
-        "nytimes.com",
-        "economist.com",
-        "caranddriver.com",
-        "autonews.com",
-        "forbes.com",
-        "washingtonpost.com",
-        "greencarcongress.com",
-        "recyclingmagazine.com"
-      ];
-
       try {
-        const isBlocked = (u: string) => {
-          try {
-            const h = new URL(u).hostname.replace(/^www\./, "");
-            return blocked.some(d => h.endsWith(d));
-          } catch { return false; }
-        };
-        if (isBlocked(original)) return null;
-
-        // Resolve redirects to original article and extract a short meta description
         const res = await fetchWithTimeout(original, { method: 'GET' }, 8000).catch(() => null as any);
         if (!res || !res.ok) return null;
-        const ct = res.headers.get('content-type') || '';
-        if (!/text\/html/i.test(ct)) return null;
-
-        // Final URL after redirects (avoid storing news.google.com redirector)
-        let finalUrl = res.url || original;
-        try {
-          const u = new URL(finalUrl);
-          if (u.hostname.endsWith('news.google.com')) {
-            // If still on Google, try one more follow (some environments keep url)
-            const follow = await fetchWithTimeout(original, { method: 'GET' }, 8000).catch(() => null as any);
-            if (follow && follow.ok && /text\/html/i.test(follow.headers.get('content-type') || '')) {
-              finalUrl = follow.url || finalUrl;
-            }
-          }
-        } catch {}
-
-        // Read HTML and extract meta description (keep it light)
+        
         const html = await res.text();
-        let summary = extractMetaDescription(html) || '';
-        if (!summary) {
-          const t = extractOgTitle(html) || extractTitle(html) || '';
-          summary = t && t !== article.title ? t : '';
-        }
-        if (!summary) {
-          // fallback to cleaned RSS description if provided
-          const cleaned = article.summary ? decodeHtml(stripHtml(article.summary)) : '';
-          summary = cleaned || article.title || '';
-        }
-        summary = clampSummary(summary, 260);
+        let summary = extractMetaDescription(html) || article.summary || article.title;
+        summary = clampSummary(decodeHtml(stripHtml(summary)), 260);
 
-        return { ...article, url: finalUrl, summary };
-      } catch (e) {
-        console.warn('validateAndFixUrl error for', original, e);
+        return { ...article, url: res.url || original, summary };
+      } catch {
         return null;
       }
     };
 
-    const validateArticles = async (articles: any[]) => {
-      const results: any[] = [];
-      const invalid: any[] = [];
-      const batchSize = 5;
-      for (let i = 0; i < articles.length; i += batchSize) {
-        const batch = articles.slice(i, i + batchSize);
-        const validated = await Promise.all(batch.map(validateAndFixUrl));
-        for (let j = 0; j < validated.length; j++) {
-          if (validated[j]) {
-            results.push(validated[j]);
-          } else {
-            invalid.push(batch[j]);
-          }
-        }
-        // tiny delay to be gentle with sites
-        await new Promise(r => setTimeout(r, 150));
-      }
-      return { valid: results, invalid };
-    };
-
-    // Parse RSS feed and extract articles
-    const parseRssItems = (xml: string, defaultCategory: string, defaultSource: string) => {
+    const parseRssItems = (xml: string) => {
       const items: any[] = [];
-      const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+      const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
       let match;
-      
       while ((match = itemRegex.exec(xml)) !== null) {
         const itemXml = match[1];
-        
-        const extractTag = (tag: string) => {
-          const regex = new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>|<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
-          const m = itemXml.match(regex);
-          return m ? (m[1] || m[2] || '').trim() : '';
+        const getTag = (tag: string) => {
+          const m = itemXml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+          return m ? decodeHtml(stripHtml(m[1])).trim() : '';
         };
-        
-        const title = extractTag('title');
-        const link = extractTag('link');
-        const pubDate = extractTag('pubDate');
-        const description = extractTag('description');
-        
+
+        const title = getTag('title');
+        const link = getTag('link') || getTag('guid');
+        const pubDate = getTag('pubDate') || getTag('published');
+        const description = getTag('description');
+
         if (title && link) {
-          // Parse date
           let formattedDate = new Date().toISOString().split('T')[0];
           if (pubDate) {
-            try {
-              formattedDate = new Date(pubDate).toISOString().split('T')[0];
-            } catch (e) {
-              console.warn('Failed to parse date:', pubDate);
-            }
+            try { formattedDate = new Date(pubDate).toISOString().split('T')[0]; } catch {}
           }
 
-          // Clean summary from RSS (remove HTML/link wrappers)
-          const rawSummary = description || title;
-          const cleanedSummary = clampSummary(decodeHtml(stripHtml(rawSummary)), 260);
-          
-          items.push({
-            title,
-            title_kr: title, // same as title since no AI translation
-            summary: cleanedSummary,
-            category: defaultCategory,
-            source: defaultSource,
-            date: formattedDate,
-            url: link,
-          });
+          items.push({ title, url: link, date: formattedDate, summary: description });
         }
       }
-      
       return items;
     };
 
-    // Define RSS feeds to crawl (open-access sources only to avoid blocks)
-    const feeds = [
-      { url: 'https://electrek.co/guides/electric-vehicles/feed/', category: '기타', source: 'Electrek' },
-      { url: 'https://insideevs.com/rss', category: '북미', source: 'InsideEVs' },
-      { url: 'https://cleantechnica.com/category/transportation/electric-vehicles/feed/', category: '북미', source: 'CleanTechnica' },
-      { url: 'https://www.greencarreports.com/rss', category: '북미', source: 'Green Car Reports' },
-    ];
-
-    const allArticles = [];
-    const seenUrls = new Set();
-    const MAX_PER_FEED = 25;
-    const GLOBAL_MAX = 100;
-
-    // Fetch and parse each RSS feed
-    for (const feed of feeds) {
-      console.log(`Fetching RSS feed: ${feed.source}...`);
+    const classifyAndTranslate = async (articles: any[]) => {
+      const batchSize = 10;
+      const processed: any[] = [];
       
-      try {
-        const response = await fetchWithTimeout(feed.url, {}, 15000);
-        if (!response.ok) {
-          console.error(`Failed to fetch ${feed.source}: ${response.status}`);
-          continue;
-        }
+      for (let i = 0; i < articles.length; i += batchSize) {
+        const batch = articles.slice(i, i + batchSize);
         
-        const xml = await response.text();
-        const items = parseRssItems(xml, feed.category, feed.source).slice(0, MAX_PER_FEED);
-        
-        console.log(`Found ${items.length} items in ${feed.source} (limited to ${MAX_PER_FEED})`);
-        
-        // Add unique items to allArticles
-        for (const item of items) {
-          const normalizedUrl = normalizeUrl(item.url);
-          if (normalizedUrl && !seenUrls.has(normalizedUrl)) {
-            seenUrls.add(normalizedUrl);
-            allArticles.push({ ...item, url: normalizedUrl });
-            if (allArticles.length >= GLOBAL_MAX) {
-              console.log(`Reached global cap of ${GLOBAL_MAX} articles, stopping early.`);
-              break;
+        try {
+          const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: [
+                {
+                  role: "system",
+                  content: `분석할 기사를 보고 카테고리를 선택하고 한국어로 번역하세요.
+
+카테고리: 북미, 유럽, 중국, 한국, 테슬라, 현대/기아, BMW, 폭스바겐, Nidec, Continental, Bosch, Hitachi, 기타
+
+가장 관련성 높은 카테고리 1개를 선택하세요.`
+                },
+                {
+                  role: "user",
+                  content: JSON.stringify(batch.map((a, idx) => ({ index: idx, title: a.title, summary: a.summary || '' })))
+                }
+              ],
+              tools: [{
+                type: "function",
+                function: {
+                  name: "classify_articles",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      results: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            index: { type: "number" },
+                            category: { type: "string" },
+                            title_kr: { type: "string" }
+                          },
+                          required: ["index", "category", "title_kr"]
+                        }
+                      }
+                    },
+                    required: ["results"]
+                  }
+                }
+              }],
+              tool_choice: { type: "function", function: { name: "classify_articles" } }
+            }),
+          });
+
+          if (!response.ok) {
+            for (const article of batch) {
+              processed.push({ ...article, category: "기타", title_kr: article.title });
+            }
+            continue;
+          }
+
+          const data = await response.json();
+          const result = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || '{"results":[]}');
+            
+          for (const cls of result.results || []) {
+            const article = batch[cls.index];
+            if (article) {
+              processed.push({ ...article, category: cls.category || "기타", title_kr: cls.title_kr || article.title });
             }
           }
+        } catch {
+          for (const article of batch) {
+            processed.push({ ...article, category: "기타", title_kr: article.title });
+          }
         }
-        
-        if (allArticles.length >= GLOBAL_MAX) break;
-        
-        // Small delay between feeds
-        await new Promise(resolve => setTimeout(resolve, 300));
-      } catch (error) {
-        console.error(`Error fetching ${feed.source}:`, error);
-        continue;
       }
+      
+      return processed;
+    };
+
+    const feeds = [
+      { name: 'Electrek', url: 'https://electrek.co/feed/' },
+      { name: 'InsideEVs', url: 'https://insideevs.com/feed/' },
+      { name: 'CleanTechnica', url: 'https://cleantechnica.com/feed/' },
+      { name: 'Green Car Reports', url: 'https://www.greencarreports.com/rss/all' },
+      { name: 'Automotive News', url: 'https://www.autonews.com/rss' },
+    ];
+
+    const collectedArticles: any[] = [];
+    const seenUrls = new Set<string>();
+
+    for (const feed of feeds) {
+      if (collectedArticles.length >= 100) break;
+      
+      try {
+        console.log(`Fetching: ${feed.name}`);
+        const res = await fetchWithTimeout(feed.url, {}, 10000);
+        if (!res.ok) continue;
+
+        const xml = await res.text();
+        const items = parseRssItems(xml);
+
+        for (const item of items.slice(0, 20)) {
+          if (collectedArticles.length >= 100) break;
+          const url = normalizeUrl(item.url);
+          if (url && !seenUrls.has(url)) {
+            seenUrls.add(url);
+            collectedArticles.push({ ...item, url, source: feed.name });
+          }
+        }
+      } catch {}
     }
 
-    if (allArticles.length === 0) {
-      throw new Error("No articles were generated");
+    console.log(`Collected: ${collectedArticles.length}`);
+
+    const validated = [];
+    for (let i = 0; i < collectedArticles.length; i += 5) {
+      const batch = await Promise.all(collectedArticles.slice(i, i + 5).map(validateAndFixUrl));
+      validated.push(...batch.filter(Boolean));
     }
 
-    console.log(`Total articles collected from feeds: ${allArticles.length}`);
+    console.log(`Validated: ${validated.length}`);
 
-    // Validate URLs - keep both validated and invalid articles for logging only
-    const { valid, invalid } = await validateArticles(allArticles);
-    console.log(`Validated articles: ${valid.length}, rejected: ${invalid.length}`);
-    
-    if (valid.length === 0) {
-      throw new Error("No valid articles after URL validation");
+    if (validated.length === 0) {
+      return new Response(JSON.stringify({ success: true, upserted: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`Inserting ${valid.length} validated articles`);
+    const classified = await classifyAndTranslate(validated);
+    console.log(`Classified: ${classified.length}`);
 
-    // De-duplicate by URL and upsert
-    const uniqueValidated = Array.from(new Map(valid.map((a: any) => [a.url, a])).values());
+    await supabase.from('news').upsert(
+      classified.map(a => ({
+        title: a.title,
+        title_kr: a.title_kr,
+        summary: a.summary,
+        url: a.url,
+        date: a.date,
+        category: a.category,
+        source: a.source,
+      })),
+      { onConflict: 'url' }
+    );
 
-    const { error: upsertError } = await supabase
-      .from('news')
-      .upsert(uniqueValidated.map((article: any) => ({
-        title: article.title || 'Untitled',
-        title_kr: article.title_kr || '제목 없음',
-        summary: article.summary || '',
-        category: article.category,
-        source: article.source || 'Unknown',
-        date: article.date || new Date().toISOString().split('T')[0],
-        url: article.url || '#',
-      })) as any, { onConflict: 'url' } as any);
-
-    if (upsertError) {
-      console.error('Error upserting news:', upsertError);
-      throw upsertError;
-    }
-
-    // Optional cleanup: remove very old news (> 60 days) to keep table fresh
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 60);
-    const cutoffStr = cutoff.toISOString().split('T')[0];
-    const { error: cleanupError } = await supabase
-      .from('news')
-      .delete()
-      .lt('date', cutoffStr);
-    if (cleanupError) console.warn('Cleanup old news failed:', cleanupError);
-
-    // Aggregator cleanup no longer needed since we avoid Google News feeds
-
-    console.log(`Upserted ${uniqueValidated.length} news articles (${valid.length} validated, ${invalid.length} unvalidated)`);
+    console.log(`Upserted: ${classified.length}`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true,
-        collected_count: allArticles.length,
-        validated_count: valid.length,
-        invalid_count: invalid.length,
-        upserted_count: uniqueValidated.length
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ success: true, upserted: classified.length }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error in crawl-news function:', error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    const errorDetails = error instanceof Error ? error.stack : String(error);
-    console.error('Error details:', errorDetails);
+    console.error('Error:', error);
     return new Response(
-      JSON.stringify({ error: errorMessage, details: errorDetails }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
+      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
