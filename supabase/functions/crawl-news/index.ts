@@ -207,6 +207,10 @@ serve(async (req) => {
       { name: 'CleanTechnica', url: 'https://cleantechnica.com/feed/' },
       { name: 'Green Car Reports', url: 'https://www.greencarreports.com/rss/all' },
       { name: 'Automotive News', url: 'https://www.autonews.com/rss' },
+      { name: 'Google News EV Motor', url: 'https://news.google.com/rss/search?q=electric+vehicle+motor+technology&hl=en-US&gl=US&ceid=US:en' },
+      { name: 'Automotive World', url: 'https://www.automotiveworld.com/feed/' },
+      { name: 'EV Magazine', url: 'https://evmagazine.com/feed' },
+      { name: 'Power Electronics News', url: 'https://www.powerelectronicsnews.com/feed/' },
     ];
 
     const collectedArticles: any[] = [];
