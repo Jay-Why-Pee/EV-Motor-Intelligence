@@ -12,7 +12,7 @@ interface NewsArticle {
   title: string;
   title_kr: string;
   summary: string;
-  category: string;
+  category: string[];
   source: string;
   date: string;
   url: string;
@@ -105,7 +105,7 @@ export const NewsView = () => {
 
   const filteredNews = activeCategory === "all" 
     ? news 
-    : news.filter(article => article.category === activeCategory);
+    : news.filter(article => article.category.includes(activeCategory));
 
   const displayedNews = filteredNews.slice(0, displayCount);
   const hasMore = displayedNews.length < filteredNews.length;
@@ -154,7 +154,7 @@ export const NewsView = () => {
                       {category.label}
                       {activeCategory === category.id && (
                         <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-primary-foreground text-primary">
-                          {category.id === "all" ? news.length : news.filter(n => n.category === category.id).length}
+                          {category.id === "all" ? news.length : news.filter(n => n.category.includes(category.id)).length}
                         </span>
                       )}
                     </Button>
