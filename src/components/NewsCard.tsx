@@ -6,16 +6,13 @@ interface NewsCardProps {
   title: string;
   title_kr: string;
   summary: string;
-  category: string;
+  category: string[];
   source: string;
   date: string;
   url: string;
 }
 
 export const NewsCard = ({ title_kr, summary, category, source, date, url }: NewsCardProps) => {
-  // Use category as label directly, fallback to "기타" if not available
-  const categoryLabel = category || "기타";
-  
   return (
     <a 
       href={url} 
@@ -25,10 +22,14 @@ export const NewsCard = ({ title_kr, summary, category, source, date, url }: New
     >
       <Card className="p-5 card-glow group cursor-pointer h-full flex flex-col hover:shadow-lg transition-shadow">
         <div className="flex items-start justify-between mb-3">
-          <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30">
-            {categoryLabel}
-          </Badge>
-          <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+          <div className="flex flex-wrap gap-2">
+            {category.map((cat, idx) => (
+              <Badge key={idx} variant="outline" className="bg-primary/20 text-primary border-primary/30">
+                {cat}
+              </Badge>
+            ))}
+          </div>
+          <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0 ml-2" />
         </div>
         
         <h3 className="font-bold text-lg mb-3 line-clamp-2 group-hover:text-primary transition-colors">

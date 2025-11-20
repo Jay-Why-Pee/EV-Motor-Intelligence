@@ -136,11 +136,15 @@ serve(async (req) => {
               messages: [
                 {
                   role: "system",
-                  content: `분석할 기사를 보고 카테고리를 선택하고 한국어로 번역하세요.
+                  content: `분석할 기사를 보고 관련된 모든 카테고리를 선택하고 한국어로 번역하세요.
 
-카테고리: 북미, 유럽, 중국, 한국, 테슬라, 현대/기아, BMW, 폭스바겐, Nidec, Continental, Bosch, Hitachi, 기타
+카테고리: 아시아, 유럽, 북미, 중국, GM, Ford, 벤츠, BMW, 폭스바겐, Honda, 현대, Bosch, ZF, Schaeffler, LG마그나, 기타
 
-가장 관련성 높은 카테고리 1개를 선택하세요.`
+중요: 
+- 여러 카테고리에 해당되면 모두 선택하세요.
+- 고객사(GM, Ford, 벤츠, BMW, 폭스바겐, Honda, 현대)와 모터제조사(Bosch, ZF, Schaeffler, LG마그나) 관련 기사를 우선시하세요.
+- 예: 벤츠의 유럽 전기차 기사 → ["유럽", "벤츠"]
+- 예: Bosch의 북미 모터 기술 → ["북미", "Bosch"]`
                 },
                 {
                   role: "user",
@@ -160,10 +164,14 @@ serve(async (req) => {
                           type: "object",
                           properties: {
                             index: { type: "number" },
-                            category: { type: "string" },
+                            categories: { 
+                              type: "array",
+                              items: { type: "string" },
+                              description: "관련된 모든 카테고리 배열"
+                            },
                             title_kr: { type: "string" }
                           },
-                          required: ["index", "category", "title_kr"]
+                          required: ["index", "categories", "title_kr"]
                         }
                       }
                     },
@@ -177,7 +185,7 @@ serve(async (req) => {
 
           if (!response.ok) {
             for (const article of batch) {
-              processed.push({ ...article, category: "기타", title_kr: article.title });
+              processed.push({ ...article, category: ["기타"], title_kr: article.title });
             }
             continue;
           }
@@ -188,12 +196,13 @@ serve(async (req) => {
           for (const cls of result.results || []) {
             const article = batch[cls.index];
             if (article) {
-              processed.push({ ...article, category: cls.category || "기타", title_kr: cls.title_kr || article.title });
+              const categories = Array.isArray(cls.categories) && cls.categories.length > 0 ? cls.categories : ["기타"];
+              processed.push({ ...article, category: categories, title_kr: cls.title_kr || article.title });
             }
           }
         } catch {
           for (const article of batch) {
-            processed.push({ ...article, category: "기타", title_kr: article.title });
+            processed.push({ ...article, category: ["기타"], title_kr: article.title });
           }
         }
       }
@@ -207,7 +216,7 @@ serve(async (req) => {
       { name: 'CleanTechnica', url: 'https://cleantechnica.com/feed/' },
       { name: 'Green Car Reports', url: 'https://www.greencarreports.com/rss/all' },
       { name: 'Automotive News', url: 'https://www.autonews.com/rss' },
-      { name: 'Google News EV Motor', url: 'https://news.google.com/rss/search?q=electric+vehicle+motor+technology&hl=en-US&gl=US&ceid=US:en' },
+      { name: 'Google News EV Motor', url: 'https://news.google.com/rss/search?q=electric+vehicle+motor+technology+BMW+Mercedes+Volkswagen+Hyundai+Bosch+ZF&hl=en-US&gl=US&ceid=US:en' },
       { name: 'Automotive World', url: 'https://www.automotiveworld.com/feed/' },
       { name: 'EV Magazine', url: 'https://evmagazine.com/feed' },
       { name: 'Power Electronics News', url: 'https://www.powerelectronicsnews.com/feed/' },
@@ -254,6 +263,23 @@ serve(async (req) => {
 
     const classified = await classifyAndTranslate(validated);
     console.log(`Classified: ${classified.length}`);
+
+    // Check current count and delete oldest if over 1000
+    const { count } = await supabase.from('news').select('*', { count: 'exact', head: true });
+    
+    if (count && count + classified.length > 1000) {
+      const toDelete = count + classified.length - 1000;
+      const { data: oldestNews } = await supabase
+        .from('news')
+        .select('id')
+        .order('date', { ascending: true })
+        .limit(toDelete);
+      
+      if (oldestNews && oldestNews.length > 0) {
+        await supabase.from('news').delete().in('id', oldestNews.map(n => n.id));
+        console.log(`Deleted ${oldestNews.length} oldest articles to maintain 1000 limit`);
+      }
+    }
 
     await supabase.from('news').upsert(
       classified.map(a => ({
