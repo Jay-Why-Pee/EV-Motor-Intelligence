@@ -138,11 +138,11 @@ serve(async (req) => {
                   role: "system",
                   content: `Analyze news articles and select all relevant categories, then translate title to Korean.
 
-Categories: Asia, Europe, North America, China, GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Bosch, ZF, Schaeffler, LG Magna, Other
+Categories: Asia, Europe, North America, China, GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely, Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo, Other
 
 Important: 
 - Select MULTIPLE categories if the article is relevant to more than one
-- PRIORITIZE articles about customers (GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai) and motor manufacturers (Bosch, ZF, Schaeffler, LG Magna)
+- PRIORITIZE articles about customers (GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely) and motor manufacturers (Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo)
 - Example: Mercedes EV article in Europe → ["Europe", "Mercedes-Benz"]
 - Example: Bosch motor tech in North America → ["North America", "Bosch"]`
                 },
