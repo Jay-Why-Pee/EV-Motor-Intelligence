@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-type Category = "all" | "아시아" | "유럽" | "북미" | "중국" | "GM" | "Ford" | "벤츠" | "BMW" | "폭스바겐" | "Honda" | "현대" | "Bosch" | "ZF" | "Schaeffler" | "LG마그나" | "기타";
+type Category = "all" | "Asia" | "Europe" | "North America" | "China" | "GM" | "Ford" | "Mercedes-Benz" | "BMW" | "Volkswagen" | "Honda" | "Hyundai" | "Bosch" | "ZF" | "Schaeffler" | "LG Magna" | "Other";
 
 interface NewsArticle {
   id: string;
@@ -81,26 +81,26 @@ export const NewsView = () => {
   };
 
   const categories = [
-    { id: "all" as const, label: "전체", group: "" },
+    { id: "all" as const, label: "All", group: "" },
     // Regions
-    { id: "아시아" as const, label: "아시아", group: "지역" },
-    { id: "유럽" as const, label: "유럽", group: "지역" },
-    { id: "북미" as const, label: "북미", group: "지역" },
-    { id: "중국" as const, label: "중국", group: "지역" },
+    { id: "Asia" as const, label: "Asia", group: "Region" },
+    { id: "Europe" as const, label: "Europe", group: "Region" },
+    { id: "North America" as const, label: "North America", group: "Region" },
+    { id: "China" as const, label: "China", group: "Region" },
     // Customers
-    { id: "GM" as const, label: "GM", group: "고객사" },
-    { id: "Ford" as const, label: "Ford", group: "고객사" },
-    { id: "벤츠" as const, label: "벤츠", group: "고객사" },
-    { id: "BMW" as const, label: "BMW", group: "고객사" },
-    { id: "폭스바겐" as const, label: "폭스바겐", group: "고객사" },
-    { id: "Honda" as const, label: "Honda", group: "고객사" },
-    { id: "현대" as const, label: "현대", group: "고객사" },
+    { id: "GM" as const, label: "GM", group: "Customers" },
+    { id: "Ford" as const, label: "Ford", group: "Customers" },
+    { id: "Mercedes-Benz" as const, label: "Mercedes-Benz", group: "Customers" },
+    { id: "BMW" as const, label: "BMW", group: "Customers" },
+    { id: "Volkswagen" as const, label: "Volkswagen", group: "Customers" },
+    { id: "Honda" as const, label: "Honda", group: "Customers" },
+    { id: "Hyundai" as const, label: "Hyundai", group: "Customers" },
     // Motor manufacturers
-    { id: "Bosch" as const, label: "Bosch", group: "모터제조사" },
-    { id: "ZF" as const, label: "ZF", group: "모터제조사" },
-    { id: "Schaeffler" as const, label: "Schaeffler", group: "모터제조사" },
-    { id: "LG마그나" as const, label: "LG마그나", group: "모터제조사" },
-    { id: "기타" as const, label: "기타", group: "모터제조사" },
+    { id: "Bosch" as const, label: "Bosch", group: "Motor Manufacturers" },
+    { id: "ZF" as const, label: "ZF", group: "Motor Manufacturers" },
+    { id: "Schaeffler" as const, label: "Schaeffler", group: "Motor Manufacturers" },
+    { id: "LG Magna" as const, label: "LG Magna", group: "Motor Manufacturers" },
+    { id: "Other" as const, label: "Other", group: "Motor Manufacturers" },
   ];
 
   const filteredNews = activeCategory === "all" 
@@ -124,10 +124,10 @@ export const NewsView = () => {
 
   // Group categories by type
   const groupedCategories = [
-    { label: "전체", categories: categories.filter(c => c.id === "all") },
-    { label: "지역", categories: categories.filter(c => c.group === "지역") },
-    { label: "고객사", categories: categories.filter(c => c.group === "고객사") },
-    { label: "모터제조사", categories: categories.filter(c => c.group === "모터제조사") },
+    { label: "All", categories: categories.filter(c => c.id === "all") },
+    { label: "Region", categories: categories.filter(c => c.group === "Region") },
+    { label: "Customers", categories: categories.filter(c => c.group === "Customers") },
+    { label: "Motor Manufacturers", categories: categories.filter(c => c.group === "Motor Manufacturers") },
   ];
 
   return (
