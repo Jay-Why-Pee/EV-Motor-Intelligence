@@ -136,15 +136,15 @@ serve(async (req) => {
               messages: [
                 {
                   role: "system",
-                  content: `분석할 기사를 보고 관련된 모든 카테고리를 선택하고 한국어로 번역하세요.
+                  content: `Analyze news articles and select all relevant categories, then translate title to Korean.
 
-카테고리: 아시아, 유럽, 북미, 중국, GM, Ford, 벤츠, BMW, 폭스바겐, Honda, 현대, Bosch, ZF, Schaeffler, LG마그나, 기타
+Categories: Asia, Europe, North America, China, GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Bosch, ZF, Schaeffler, LG Magna, Other
 
-중요: 
-- 여러 카테고리에 해당되면 모두 선택하세요.
-- 고객사(GM, Ford, 벤츠, BMW, 폭스바겐, Honda, 현대)와 모터제조사(Bosch, ZF, Schaeffler, LG마그나) 관련 기사를 우선시하세요.
-- 예: 벤츠의 유럽 전기차 기사 → ["유럽", "벤츠"]
-- 예: Bosch의 북미 모터 기술 → ["북미", "Bosch"]`
+Important: 
+- Select MULTIPLE categories if the article is relevant to more than one
+- PRIORITIZE articles about customers (GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai) and motor manufacturers (Bosch, ZF, Schaeffler, LG Magna)
+- Example: Mercedes EV article in Europe → ["Europe", "Mercedes-Benz"]
+- Example: Bosch motor tech in North America → ["North America", "Bosch"]`
                 },
                 {
                   role: "user",
@@ -185,7 +185,7 @@ serve(async (req) => {
 
           if (!response.ok) {
             for (const article of batch) {
-              processed.push({ ...article, category: ["기타"], title_kr: article.title });
+              processed.push({ ...article, category: ["Other"], title_kr: article.title });
             }
             continue;
           }
@@ -196,13 +196,13 @@ serve(async (req) => {
           for (const cls of result.results || []) {
             const article = batch[cls.index];
             if (article) {
-              const categories = Array.isArray(cls.categories) && cls.categories.length > 0 ? cls.categories : ["기타"];
+              const categories = Array.isArray(cls.categories) && cls.categories.length > 0 ? cls.categories : ["Other"];
               processed.push({ ...article, category: categories, title_kr: cls.title_kr || article.title });
             }
           }
         } catch {
           for (const article of batch) {
-            processed.push({ ...article, category: ["기타"], title_kr: article.title });
+            processed.push({ ...article, category: ["Other"], title_kr: article.title });
           }
         }
       }
