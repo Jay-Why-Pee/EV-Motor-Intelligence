@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-type Category = "all" | "Asia" | "Europe" | "North America" | "China" | "GM" | "Ford" | "Mercedes-Benz" | "BMW" | "Volkswagen" | "Honda" | "Hyundai" | "Bosch" | "ZF" | "Schaeffler" | "LG Magna" | "Other";
+type Category = "all" | "Asia" | "Europe" | "North America" | "China" | "GM" | "Ford" | "Mercedes-Benz" | "BMW" | "Volkswagen" | "Honda" | "Hyundai" | "Stellantis" | "Toyota" | "Tesla" | "Nissan" | "Renault" | "BYD" | "Xiaomi" | "Geely" | "Bosch" | "ZF" | "Schaeffler" | "LG Magna" | "Denso" | "Magna" | "Hyundai Mobis" | "AISIN" | "BorgWarner" | "Hitachi Astemo" | "Other";
 
 interface NewsArticle {
   id: string;
@@ -95,11 +95,25 @@ export const NewsView = () => {
     { id: "Volkswagen" as const, label: "Volkswagen", group: "Customers" },
     { id: "Honda" as const, label: "Honda", group: "Customers" },
     { id: "Hyundai" as const, label: "Hyundai", group: "Customers" },
+    { id: "Stellantis" as const, label: "Stellantis", group: "Customers" },
+    { id: "Toyota" as const, label: "Toyota", group: "Customers" },
+    { id: "Tesla" as const, label: "Tesla", group: "Customers" },
+    { id: "Nissan" as const, label: "Nissan", group: "Customers" },
+    { id: "Renault" as const, label: "Renault", group: "Customers" },
+    { id: "BYD" as const, label: "BYD", group: "Customers" },
+    { id: "Xiaomi" as const, label: "Xiaomi", group: "Customers" },
+    { id: "Geely" as const, label: "Geely", group: "Customers" },
     // Motor manufacturers
     { id: "Bosch" as const, label: "Bosch", group: "Motor Manufacturers" },
     { id: "ZF" as const, label: "ZF", group: "Motor Manufacturers" },
     { id: "Schaeffler" as const, label: "Schaeffler", group: "Motor Manufacturers" },
     { id: "LG Magna" as const, label: "LG Magna", group: "Motor Manufacturers" },
+    { id: "Denso" as const, label: "Denso", group: "Motor Manufacturers" },
+    { id: "Magna" as const, label: "Magna", group: "Motor Manufacturers" },
+    { id: "Hyundai Mobis" as const, label: "Hyundai Mobis", group: "Motor Manufacturers" },
+    { id: "AISIN" as const, label: "AISIN", group: "Motor Manufacturers" },
+    { id: "BorgWarner" as const, label: "BorgWarner", group: "Motor Manufacturers" },
+    { id: "Hitachi Astemo" as const, label: "Hitachi Astemo", group: "Motor Manufacturers" },
     { id: "Other" as const, label: "Other", group: "Motor Manufacturers" },
   ];
 
