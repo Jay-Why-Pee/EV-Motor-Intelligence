@@ -226,7 +226,7 @@ Important:
     const seenUrls = new Set<string>();
 
     for (const feed of feeds) {
-      if (collectedArticles.length >= 100) break;
+      if (collectedArticles.length >= 300) break;
       
       try {
         console.log(`Fetching: ${feed.name}`);
@@ -236,8 +236,8 @@ Important:
         const xml = await res.text();
         const items = parseRssItems(xml);
 
-        for (const item of items.slice(0, 20)) {
-          if (collectedArticles.length >= 100) break;
+        for (const item of items.slice(0, 50)) {
+          if (collectedArticles.length >= 300) break;
           const url = normalizeUrl(item.url);
           if (url && !seenUrls.has(url)) {
             seenUrls.add(url);
@@ -263,23 +263,6 @@ Important:
 
     const classified = await classifyAndTranslate(validated);
     console.log(`Classified: ${classified.length}`);
-
-    // Check current count and delete oldest if over 1000
-    const { count } = await supabase.from('news').select('*', { count: 'exact', head: true });
-    
-    if (count && count + classified.length > 1000) {
-      const toDelete = count + classified.length - 1000;
-      const { data: oldestNews } = await supabase
-        .from('news')
-        .select('id')
-        .order('date', { ascending: true })
-        .limit(toDelete);
-      
-      if (oldestNews && oldestNews.length > 0) {
-        await supabase.from('news').delete().in('id', oldestNews.map(n => n.id));
-        console.log(`Deleted ${oldestNews.length} oldest articles to maintain 1000 limit`);
-      }
-    }
 
     await supabase.from('news').upsert(
       classified.map(a => ({
