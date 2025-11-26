@@ -5,7 +5,7 @@ import { ChartsView } from "@/components/ChartsView";
 import { NewsView } from "@/components/NewsView";
 
 const Index = () => {
-  const [activeView, setActiveView] = useState<"charts" | "news" | "insights">("charts");
+  const [activeView, setActiveView] = useState<"charts" | "news" | "insights" | "diy-insights" | "research" | "patents">("charts");
 
   const renderView = () => {
     if (activeView === "charts") return <ChartsView />;
