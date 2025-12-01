@@ -53,7 +53,7 @@ const DiyInsights = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <Navigation activeView="insights" onViewChange={() => {}} />
+      <Navigation activeView="diy-insights" onViewChange={() => {}} />
       
       <main className="container mx-auto px-4 py-6 md:py-8 max-w-7xl">
         <div className="mb-6">
@@ -103,14 +103,67 @@ const DiyInsights = () => {
           </Card>
 
           {result && (
-            <Card className="p-6 card-glow">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" />
-                생성된 인사이트
-              </h2>
-              <div className="prose prose-invert max-w-none">
-                <div className="whitespace-pre-wrap text-foreground">
-                  {result}
+            <Card className="p-8 card-glow border-primary/20">
+              <div className="space-y-8">
+                <div className="flex items-center gap-3 pb-4 border-b border-border">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Sparkles className="w-6 h-6 text-primary" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gradient">맞춤형 인사이트 분석</h2>
+                </div>
+                
+                <div className="prose prose-lg max-w-none">
+                  <div 
+                    className="text-foreground leading-relaxed space-y-6"
+                    style={{ 
+                      whiteSpace: 'pre-wrap',
+                      fontFamily: 'system-ui, -apple-system, sans-serif'
+                    }}
+                  >
+                    {result.split('\n\n').map((paragraph, idx) => {
+                      // Check if it's a heading (starts with ##)
+                      if (paragraph.startsWith('## ')) {
+                        return (
+                          <h3 key={idx} className="text-xl font-bold mt-8 mb-4 text-primary">
+                            {paragraph.replace('## ', '')}
+                          </h3>
+                        );
+                      }
+                      // Check if it's a subheading (starts with ###)
+                      if (paragraph.startsWith('### ')) {
+                        return (
+                          <h4 key={idx} className="text-lg font-semibold mt-6 mb-3 text-foreground/90">
+                            {paragraph.replace('### ', '')}
+                          </h4>
+                        );
+                      }
+                      // Check if it's a bullet list
+                      if (paragraph.includes('\n- ')) {
+                        return (
+                          <ul key={idx} className="space-y-2 ml-4 list-disc list-inside">
+                            {paragraph.split('\n- ').filter(item => item.trim()).map((item, i) => (
+                              <li key={i} className="text-foreground/90">
+                                {item.replace(/^- /, '')}
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      }
+                      // Regular paragraph
+                      return paragraph.trim() ? (
+                        <p key={idx} className="text-foreground/90 leading-relaxed">
+                          {paragraph}
+                        </p>
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-border">
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    AI 기반 맞춤형 분석 결과 • 크롤링된 최신 뉴스 기사를 기반으로 생성됨
+                  </p>
                 </div>
               </div>
             </Card>
