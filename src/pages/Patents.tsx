@@ -15,6 +15,7 @@ const Patents = () => {
       country: "대한민국",
       summary: "전기자동차용 영구자석 모터의 효율을 향상시키기 위한 새로운 구조를 제안합니다.",
       technicalField: ["영구자석 모터", "전기차", "고효율 설계"],
+      link: "https://patents.google.com/patent/KR102024001234",
     },
     {
       id: 2,
@@ -25,6 +26,7 @@ const Patents = () => {
       country: "United States",
       summary: "통합형 모터 냉각 시스템으로 열 관리 효율을 극대화하는 기술입니다.",
       technicalField: ["냉각 시스템", "열 관리", "전력 밀도"],
+      link: "https://patents.google.com/patent/US20240123456",
     },
     {
       id: 3,
@@ -35,13 +37,14 @@ const Patents = () => {
       country: "Europe",
       summary: "헤어핀 권선 방식을 활용한 고출력 모터 설계 기술입니다.",
       technicalField: ["헤어핀 권선", "고출력", "소형화"],
+      link: "https://patents.google.com/patent/EP20240567890",
     },
   ];
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <Navigation activeView="charts" onViewChange={() => {}} />
+      <Navigation activeView="patents" onViewChange={() => {}} />
       
       <main className="container mx-auto px-4 py-6 md:py-8 max-w-7xl">
         <div className="mb-6">
@@ -55,8 +58,15 @@ const Patents = () => {
 
         <div className="grid gap-6">
           {patents.map((patent) => (
-            <Card key={patent.id} className="p-6 card-glow">
-              <div className="space-y-4">
+            <a 
+              key={patent.id} 
+              href={patent.link} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="block transition-transform hover:scale-[1.01]"
+            >
+              <Card className="p-6 card-glow cursor-pointer">
+                <div className="space-y-4">
                 <div>
                   <h2 className="text-xl font-semibold mb-2">{patent.title}</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-muted-foreground mb-4">
@@ -92,7 +102,8 @@ const Patents = () => {
                   ))}
                 </div>
               </div>
-            </Card>
+              </Card>
+            </a>
           ))}
         </div>
       </main>

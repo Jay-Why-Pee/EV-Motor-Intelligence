@@ -14,6 +14,7 @@ const Research = () => {
       year: "2024",
       summary: "본 논문은 전기자동차용 영구자석 모터의 효율 향상을 위한 새로운 설계 방법론을 제시합니다.",
       keywords: ["영구자석", "모터 설계", "전기차", "효율"],
+      link: "https://ieeexplore.ieee.org/document/example1",
     },
     {
       id: 2,
@@ -23,13 +24,14 @@ const Research = () => {
       year: "2024",
       summary: "고출력 밀도 전기차 모터의 열 관리 시스템 최적화에 관한 연구입니다.",
       keywords: ["열 관리", "고출력", "냉각 시스템"],
+      link: "https://www.sciencedirect.com/science/article/example2",
     },
   ];
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <Navigation activeView="charts" onViewChange={() => {}} />
+      <Navigation activeView="research" onViewChange={() => {}} />
       
       <main className="container mx-auto px-4 py-6 md:py-8 max-w-7xl">
         <div className="mb-6">
@@ -43,8 +45,15 @@ const Research = () => {
 
         <div className="grid gap-6">
           {papers.map((paper) => (
-            <Card key={paper.id} className="p-6 card-glow">
-              <div className="space-y-4">
+            <a 
+              key={paper.id} 
+              href={paper.link} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="block transition-transform hover:scale-[1.01]"
+            >
+              <Card className="p-6 card-glow cursor-pointer">
+                <div className="space-y-4">
                 <div>
                   <h2 className="text-xl font-semibold mb-2">{paper.title}</h2>
                   <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
@@ -76,7 +85,8 @@ const Research = () => {
                   ))}
                 </div>
               </div>
-            </Card>
+              </Card>
+            </a>
           ))}
         </div>
       </main>
