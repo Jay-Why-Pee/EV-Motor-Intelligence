@@ -1,45 +1,37 @@
+import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { Navigation } from "@/components/Navigation";
 import { Card } from "@/components/ui/card";
-import { FileText, Building, Calendar, Globe } from "lucide-react";
+import { FileText, Building, Calendar, Globe, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const Patents = () => {
-  // Placeholder data - will be replaced with actual patent data
-  const patents = [
-    {
-      id: 1,
-      title: "고효율 영구자석 모터 구조",
-      patentNumber: "KR-10-2023-0123456",
-      applicant: "현대자동차",
-      filingDate: "2023-09-15",
-      country: "대한민국",
-      summary: "전기자동차용 영구자석 모터의 효율을 향상시키기 위한 새로운 로터 구조를 제안합니다.",
-      technicalField: ["영구자석 모터", "전기차", "고효율 설계"],
-      link: "https://patents.google.com/patent/KR102023012345",
-    },
-    {
-      id: 2,
-      title: "Electric Motor with Integrated Cooling System",
-      patentNumber: "US-11123456-B2",
-      applicant: "Tesla, Inc.",
-      filingDate: "2022-03-20",
-      country: "United States",
-      summary: "통합형 냉각 시스템을 갖춘 전기 모터로 열 관리 효율을 극대화합니다.",
-      technicalField: ["냉각 시스템", "열 관리", "전기 모터"],
-      link: "https://patents.google.com/patent/US11123456B2",
-    },
-    {
-      id: 3,
-      title: "Hairpin Winding Stator for Electric Machines",
-      patentNumber: "EP-3876234-A1",
-      applicant: "Robert Bosch GmbH",
-      filingDate: "2021-12-10",
-      country: "Europe",
-      summary: "헤어핀 권선 방식을 활용한 고출력 전기 모터 고정자 설계 기술입니다.",
-      technicalField: ["헤어핀 권선", "고출력", "전기 모터"],
-      link: "https://patents.google.com/patent/EP3876234A1",
-    },
-  ];
+  const [patents, setPatents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('market_analysis')
+          .select('*')
+          .eq('type', 'patents')
+          .maybeSingle();
+
+        if (!error && data?.content) {
+          const content = data.content as any;
+          setPatents(content.patents || []);
+          setLastUpdated(data.generated_at);
+        }
+      } catch (e) {
+        console.error('Error fetching patents data:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -48,64 +40,80 @@ const Patents = () => {
       
       <main className="container mx-auto px-4 py-6 md:py-8 max-w-7xl">
         <div className="mb-6">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gradient">
-            특허 분석
-          </h1>
-          <p className="text-muted-foreground">
-            EV 모터 기술 관련 주요 특허 동향 분석
-          </p>
+          <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gradient">특허 분석</h1>
+          <p className="text-muted-foreground">EV 모터 기술 관련 주요 특허 동향 분석 (뉴스 기반 자동 업데이트)</p>
+          {lastUpdated && (
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              마지막 업데이트: {new Date(lastUpdated).toLocaleString('ko-KR')}
+            </p>
+          )}
         </div>
 
-        <div className="grid gap-6">
-          {patents.map((patent) => (
-            <a 
-              key={patent.id} 
-              href={patent.link} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="block transition-transform hover:scale-[1.01]"
-            >
-              <Card className="p-6 card-glow cursor-pointer">
-                <div className="space-y-4">
-                <div>
-                  <h2 className="text-xl font-semibold mb-2">{patent.title}</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-muted-foreground mb-4">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4" />
-                      <span>{patent.patentNumber}</span>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : patents.length === 0 ? (
+          <Card className="p-8 text-center">
+            <p className="text-muted-foreground">아직 생성된 특허 데이터가 없습니다. 뉴스가 수집되면 자동으로 업데이트됩니다.</p>
+          </Card>
+        ) : (
+          <div className="grid gap-6">
+            {patents.map((patent: any, idx: number) => (
+              <a
+                key={idx}
+                href={patent.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block transition-transform hover:scale-[1.01]"
+              >
+                <Card className="p-6 card-glow cursor-pointer">
+                  <div className="space-y-4">
+                    <div>
+                      <h2 className="text-xl font-semibold mb-2">{patent.title}</h2>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-muted-foreground mb-4">
+                        {patent.patentNumber && (
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4" />
+                            <span>{patent.patentNumber}</span>
+                          </div>
+                        )}
+                        {patent.applicant && (
+                          <div className="flex items-center gap-2">
+                            <Building className="w-4 h-4" />
+                            <span>{patent.applicant}</span>
+                          </div>
+                        )}
+                        {patent.filingDate && (
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4" />
+                            <span>{patent.filingDate}</span>
+                          </div>
+                        )}
+                        {patent.country && (
+                          <div className="flex items-center gap-2">
+                            <Globe className="w-4 h-4" />
+                            <span>{patent.country}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Building className="w-4 h-4" />
-                      <span>{patent.applicant}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      <span>{patent.filingDate}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Globe className="w-4 h-4" />
-                      <span>{patent.country}</span>
-                    </div>
+                    <p className="text-foreground">{patent.summary}</p>
+                    {patent.technicalField && (
+                      <div className="flex flex-wrap gap-2">
+                        {patent.technicalField.map((field: string, fidx: number) => (
+                          <span key={fidx} className="px-3 py-1 bg-secondary/10 text-secondary rounded-full text-sm">
+                            {field}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-
-                <p className="text-foreground">{patent.summary}</p>
-
-                <div className="flex flex-wrap gap-2">
-                  {patent.technicalField.map((field, idx) => (
-                    <span
-                      key={idx}
-                      className="px-3 py-1 bg-secondary/10 text-secondary rounded-full text-sm"
-                    >
-                      {field}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              </Card>
-            </a>
-          ))}
-        </div>
+                </Card>
+              </a>
+            ))}
+          </div>
+        )}
       </main>
 
       <footer className="border-t border-border mt-12 py-6">
