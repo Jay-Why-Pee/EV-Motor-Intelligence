@@ -35,6 +35,30 @@ export type Database = {
         }
         Relationships: []
       }
+      market_analysis: {
+        Row: {
+          content: Json
+          generated_at: string | null
+          id: string
+          news_analyzed_count: number
+          type: string
+        }
+        Insert: {
+          content: Json
+          generated_at?: string | null
+          id?: string
+          news_analyzed_count?: number
+          type: string
+        }
+        Update: {
+          content?: Json
+          generated_at?: string | null
+          id?: string
+          news_analyzed_count?: number
+          type?: string
+        }
+        Relationships: []
+      }
       news: {
         Row: {
           category: string[]
