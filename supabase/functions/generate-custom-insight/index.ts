@@ -11,18 +11,36 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Auth check: only allow requests with valid project keys
+  const authHeader = req.headers.get('Authorization');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const token = authHeader?.replace('Bearer ', '') || '';
+  if (!authHeader || (token !== anonKey && token !== serviceKey)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+  }
+
   try {
     const { prompt } = await req.json();
 
-    if (!prompt) {
+    // Input validation
+    if (!prompt || typeof prompt !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Prompt is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    const trimmedPrompt = prompt.trim();
+    if (trimmedPrompt.length === 0 || trimmedPrompt.length > 2000) {
+      return new Response(
+        JSON.stringify({ error: 'Prompt must be between 1 and 2000 characters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseKey = serviceKey;
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -69,7 +87,7 @@ Provide detailed, actionable insights in Korean that are relevant to the company
           { role: 'system', content: systemPrompt },
           { 
             role: 'user', 
-            content: `다음은 최근 수집된 전기차 모터 산업 관련 뉴스 기사들입니다:\n\n${newsContext}\n\n사용자 요청: ${prompt}\n\n위 뉴스 기사들을 바탕으로 사용자의 요청에 답변해주세요.`
+            content: `다음은 최근 수집된 전기차 모터 산업 관련 뉴스 기사들입니다:\n\n${newsContext}\n\n사용자 요청: ${trimmedPrompt}\n\n위 뉴스 기사들을 바탕으로 사용자의 요청에 답변해주세요.`
           }
         ],
       }),
