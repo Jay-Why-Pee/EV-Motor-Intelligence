@@ -1,21 +1,24 @@
-import { BarChart3, Newspaper, Lightbulb, Sparkles, BookOpen, FileText } from "lucide-react";
+import { BarChart3, Newspaper, Search, Lightbulb, Sparkles, BookOpen, FileText } from "lucide-react";
 import { Button } from "./ui/button";
 import { useNavigate, useLocation } from "react-router-dom";
 
+type ViewType = "charts" | "news" | "diy-news" | "insights" | "diy-insights" | "research" | "patents";
+
 interface NavigationProps {
-  activeView: "charts" | "news" | "insights" | "diy-insights" | "research" | "patents";
-  onViewChange: (view: "charts" | "news" | "insights" | "diy-insights" | "research" | "patents") => void;
+  activeView: ViewType;
+  onViewChange: (view: ViewType) => void;
 }
 
 export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleNavigation = (view: "charts" | "news" | "insights" | "diy-insights" | "research" | "patents") => {
+  const handleNavigation = (view: ViewType) => {
     onViewChange(view);
-    const routes = {
+    const routes: Record<ViewType, string> = {
       charts: "/",
       news: "/",
+      "diy-news": "/diy-news",
       insights: "/insights",
       "diy-insights": "/diy-insights",
       research: "/research",
@@ -45,6 +48,15 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <Newspaper className="w-4 h-4" />
             <span className="hidden sm:inline">뉴스</span>
             <span className="sm:hidden">뉴스</span>
+          </Button>
+          <Button
+            variant={activeView === "diy-news" ? "default" : "ghost"}
+            onClick={() => handleNavigation("diy-news")}
+            className="flex items-center gap-2 shrink-0"
+          >
+            <Search className="w-4 h-4" />
+            <span className="hidden sm:inline">뉴스 DIY</span>
+            <span className="sm:hidden">뉴스DIY</span>
           </Button>
           <Button
             variant={activeView === "insights" ? "default" : "ghost"}

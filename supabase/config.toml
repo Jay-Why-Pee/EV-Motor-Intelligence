@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.analyze-market-data]
 verify_jwt = false
+
+[functions.search-news]
+verify_jwt = false
