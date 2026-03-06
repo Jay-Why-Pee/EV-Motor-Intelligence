@@ -1,15 +1,15 @@
 import { Header } from "@/components/Header";
 import { Navigation } from "@/components/Navigation";
-import { ChartsView } from "@/components/ChartsView";
+import { NewsView } from "@/components/NewsView";
 
-const Index = () => {
+const News = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <Navigation activeView="charts" />
+      <Navigation activeView="news" />
       
       <main className="container mx-auto px-4 py-6 md:py-8 max-w-7xl">
-        <ChartsView />
+        <NewsView />
       </main>
 
       <footer className="border-t border-border mt-12 py-6">
@@ -22,4 +22,4 @@ const Index = () => {
   );
 };
 
-export default Index;
+export default News;

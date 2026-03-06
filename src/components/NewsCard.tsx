@@ -13,11 +13,20 @@ interface NewsCardProps {
 }
 
 export const NewsCard = ({ title_kr, summary, category, source, date, url }: NewsCardProps) => {
+  const isValidUrl = url && url.startsWith('http');
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (!isValidUrl) {
+      e.preventDefault();
+    }
+  };
+
   return (
     <a 
-      href={url} 
-      target="_blank" 
+      href={isValidUrl ? url : '#'} 
+      target={isValidUrl ? "_blank" : undefined}
       rel="noopener noreferrer"
+      onClick={handleClick}
       className="block h-full"
     >
       <Card className="p-5 card-glow group cursor-pointer h-full flex flex-col hover:shadow-lg transition-shadow">
@@ -29,7 +38,12 @@ export const NewsCard = ({ title_kr, summary, category, source, date, url }: New
               </Badge>
             ))}
           </div>
-          <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0 ml-2" />
+          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+            {!isValidUrl && (
+              <span className="text-xs text-destructive">링크 없음</span>
+            )}
+            <ExternalLink className={`w-4 h-4 transition-colors ${isValidUrl ? 'text-muted-foreground group-hover:text-primary' : 'text-muted-foreground/30'}`} />
+          </div>
         </div>
         
         <h3 className="font-bold text-lg mb-3 line-clamp-2 group-hover:text-primary transition-colors">

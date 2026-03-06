@@ -6,24 +6,31 @@ type ViewType = "charts" | "news" | "diy-news" | "insights" | "diy-insights" | "
 
 interface NavigationProps {
   activeView: ViewType;
-  onViewChange: (view: ViewType) => void;
+  onViewChange?: (view: ViewType) => void;
 }
+
+const routes: Record<ViewType, string> = {
+  charts: "/",
+  news: "/news",
+  "diy-news": "/diy-news",
+  insights: "/insights",
+  "diy-insights": "/diy-insights",
+  research: "/research",
+  patents: "/patents"
+};
 
 export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const currentView: ViewType = (() => {
+    const path = location.pathname;
+    const entry = Object.entries(routes).find(([, route]) => route === path);
+    return (entry?.[0] as ViewType) || activeView;
+  })();
+
   const handleNavigation = (view: ViewType) => {
-    onViewChange(view);
-    const routes: Record<ViewType, string> = {
-      charts: "/",
-      news: "/",
-      "diy-news": "/diy-news",
-      insights: "/insights",
-      "diy-insights": "/diy-insights",
-      research: "/research",
-      patents: "/patents"
-    };
+    onViewChange?.(view);
     navigate(routes[view]);
   };
 
@@ -32,7 +39,7 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
       <div className="container mx-auto px-4 py-3">
         <div className="flex gap-2 overflow-x-auto">
           <Button
-            variant={activeView === "charts" ? "default" : "ghost"}
+            variant={currentView === "charts" ? "default" : "ghost"}
             onClick={() => handleNavigation("charts")}
             className="flex items-center gap-2 shrink-0"
           >
@@ -41,7 +48,7 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <span className="sm:hidden">차트</span>
           </Button>
           <Button
-            variant={activeView === "news" ? "default" : "ghost"}
+            variant={currentView === "news" ? "default" : "ghost"}
             onClick={() => handleNavigation("news")}
             className="flex items-center gap-2 shrink-0"
           >
@@ -50,7 +57,7 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <span className="sm:hidden">뉴스</span>
           </Button>
           <Button
-            variant={activeView === "diy-news" ? "default" : "ghost"}
+            variant={currentView === "diy-news" ? "default" : "ghost"}
             onClick={() => handleNavigation("diy-news")}
             className="flex items-center gap-2 shrink-0"
           >
@@ -59,7 +66,7 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <span className="sm:hidden">뉴스DIY</span>
           </Button>
           <Button
-            variant={activeView === "insights" ? "default" : "ghost"}
+            variant={currentView === "insights" ? "default" : "ghost"}
             onClick={() => handleNavigation("insights")}
             className="flex items-center gap-2 shrink-0"
           >
@@ -68,7 +75,7 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <span className="sm:hidden">인사이트</span>
           </Button>
           <Button
-            variant={activeView === "diy-insights" ? "default" : "ghost"}
+            variant={currentView === "diy-insights" ? "default" : "ghost"}
             onClick={() => handleNavigation("diy-insights")}
             className="flex items-center gap-2 shrink-0"
           >
@@ -77,7 +84,7 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <span className="sm:hidden">DIY</span>
           </Button>
           <Button
-            variant={activeView === "research" ? "default" : "ghost"}
+            variant={currentView === "research" ? "default" : "ghost"}
             onClick={() => handleNavigation("research")}
             className="flex items-center gap-2 shrink-0"
           >
@@ -86,7 +93,7 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <span className="sm:hidden">논문</span>
           </Button>
           <Button
-            variant={activeView === "patents" ? "default" : "ghost"}
+            variant={currentView === "patents" ? "default" : "ghost"}
             onClick={() => handleNavigation("patents")}
             className="flex items-center gap-2 shrink-0"
           >
