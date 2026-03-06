@@ -39,7 +39,7 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
       <div className="container mx-auto px-4 py-3">
         <div className="flex gap-2 overflow-x-auto">
           <Button
-            variant={activeView === "charts" ? "default" : "ghost"}
+            variant={currentView === "charts" ? "default" : "ghost"}
             onClick={() => handleNavigation("charts")}
             className="flex items-center gap-2 shrink-0"
           >
