@@ -1,25 +1,15 @@
-import { useState } from "react";
 import { Header } from "@/components/Header";
 import { Navigation } from "@/components/Navigation";
 import { ChartsView } from "@/components/ChartsView";
-import { NewsView } from "@/components/NewsView";
 
 const Index = () => {
-  const [activeView, setActiveView] = useState<"charts" | "news" | "diy-news" | "insights" | "diy-insights" | "research" | "patents">("charts");
-
-  const renderView = () => {
-    if (activeView === "charts") return <ChartsView />;
-    if (activeView === "news") return <NewsView />;
-    return <ChartsView />;
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <Navigation activeView={activeView} onViewChange={setActiveView} />
+      <Navigation activeView="charts" />
       
       <main className="container mx-auto px-4 py-6 md:py-8 max-w-7xl">
-        {renderView()}
+        <ChartsView />
       </main>
 
       <footer className="border-t border-border mt-12 py-6">
