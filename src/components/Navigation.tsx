@@ -6,24 +6,31 @@ type ViewType = "charts" | "news" | "diy-news" | "insights" | "diy-insights" | "
 
 interface NavigationProps {
   activeView: ViewType;
-  onViewChange: (view: ViewType) => void;
+  onViewChange?: (view: ViewType) => void;
 }
+
+const routes: Record<ViewType, string> = {
+  charts: "/",
+  news: "/news",
+  "diy-news": "/diy-news",
+  insights: "/insights",
+  "diy-insights": "/diy-insights",
+  research: "/research",
+  patents: "/patents"
+};
 
 export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const currentView: ViewType = (() => {
+    const path = location.pathname;
+    const entry = Object.entries(routes).find(([, route]) => route === path);
+    return (entry?.[0] as ViewType) || activeView;
+  })();
+
   const handleNavigation = (view: ViewType) => {
-    onViewChange(view);
-    const routes: Record<ViewType, string> = {
-      charts: "/",
-      news: "/",
-      "diy-news": "/diy-news",
-      insights: "/insights",
-      "diy-insights": "/diy-insights",
-      research: "/research",
-      patents: "/patents"
-    };
+    onViewChange?.(view);
     navigate(routes[view]);
   };
 
