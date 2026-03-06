@@ -66,7 +66,7 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <span className="sm:hidden">뉴스DIY</span>
           </Button>
           <Button
-            variant={activeView === "insights" ? "default" : "ghost"}
+            variant={currentView === "insights" ? "default" : "ghost"}
             onClick={() => handleNavigation("insights")}
             className="flex items-center gap-2 shrink-0"
           >
