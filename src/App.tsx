@@ -8,6 +8,7 @@ import News from "./pages/News";
 import Insights from "./pages/Insights";
 import DiyInsights from "./pages/DiyInsights";
 import DiyNews from "./pages/DiyNews";
+import TrendBriefing from "./pages/TrendBriefing";
 import Research from "./pages/Research";
 import Patents from "./pages/Patents";
 import NotFound from "./pages/NotFound";
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/news" element={<News />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/diy-news" element={<DiyNews />} />
+          <Route path="/trend-briefing" element={<TrendBriefing />} />
           <Route path="/diy-insights" element={<DiyInsights />} />
           <Route path="/research" element={<Research />} />
           <Route path="/patents" element={<Patents />} />
