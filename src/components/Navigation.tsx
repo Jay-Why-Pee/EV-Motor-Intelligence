@@ -13,6 +13,7 @@ const routes: Record<ViewType, string> = {
   charts: "/",
   news: "/news",
   "diy-news": "/diy-news",
+  "trend-briefing": "/trend-briefing",
   insights: "/insights",
   "diy-insights": "/diy-insights",
   research: "/research",
