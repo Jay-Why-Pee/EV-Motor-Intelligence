@@ -8,6 +8,7 @@ import News from "./pages/News";
 import Insights from "./pages/Insights";
 import DiyInsights from "./pages/DiyInsights";
 import DiyNews from "./pages/DiyNews";
+import TrendBriefing from "./pages/TrendBriefing";
 import Research from "./pages/Research";
 import Patents from "./pages/Patents";
 import NotFound from "./pages/NotFound";
