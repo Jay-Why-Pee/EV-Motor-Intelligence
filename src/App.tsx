@@ -11,6 +11,7 @@ import DiyNews from "./pages/DiyNews";
 import TrendBriefing from "./pages/TrendBriefing";
 import Research from "./pages/Research";
 import Patents from "./pages/Patents";
+import Feedback from "./pages/Feedback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
