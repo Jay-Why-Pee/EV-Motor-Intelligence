@@ -11,6 +11,7 @@ import DiyNews from "./pages/DiyNews";
 import TrendBriefing from "./pages/TrendBriefing";
 import Research from "./pages/Research";
 import Patents from "./pages/Patents";
+import Feedback from "./pages/Feedback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/diy-insights" element={<DiyInsights />} />
           <Route path="/research" element={<Research />} />
           <Route path="/patents" element={<Patents />} />
+          <Route path="/feedback" element={<Feedback />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

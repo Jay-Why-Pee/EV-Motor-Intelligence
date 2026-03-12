@@ -1,8 +1,8 @@
-import { BarChart3, Newspaper, Search, Lightbulb, Sparkles, BookOpen, FileText, TrendingUp } from "lucide-react";
+import { BarChart3, Newspaper, Search, Lightbulb, Sparkles, BookOpen, FileText, TrendingUp, MessageSquarePlus } from "lucide-react";
 import { Button } from "./ui/button";
 import { useNavigate, useLocation } from "react-router-dom";
 
-type ViewType = "charts" | "news" | "diy-news" | "trend-briefing" | "insights" | "diy-insights" | "research" | "patents";
+type ViewType = "charts" | "news" | "diy-news" | "trend-briefing" | "insights" | "diy-insights" | "research" | "patents" | "feedback";
 
 interface NavigationProps {
   activeView: ViewType;
@@ -17,7 +17,8 @@ const routes: Record<ViewType, string> = {
   insights: "/insights",
   "diy-insights": "/diy-insights",
   research: "/research",
-  patents: "/patents"
+  patents: "/patents",
+  feedback: "/feedback"
 };
 
 export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
@@ -110,6 +111,15 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <FileText className="w-4 h-4" />
             <span className="hidden sm:inline">특허</span>
             <span className="sm:hidden">특허</span>
+          </Button>
+          <Button
+            variant={currentView === "feedback" ? "default" : "ghost"}
+            onClick={() => handleNavigation("feedback")}
+            className="flex items-center gap-2 shrink-0"
+          >
+            <MessageSquarePlus className="w-4 h-4" />
+            <span className="hidden sm:inline">피드백</span>
+            <span className="sm:hidden">피드백</span>
           </Button>
         </div>
       </div>
