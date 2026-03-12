@@ -141,10 +141,17 @@ const TrendBriefing = () => {
                       {card.summary}
                     </p>
                     <div className="flex items-center justify-between pt-3 border-t border-border">
-                      <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30">
-                        출처 {card.sources.length}건
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">클릭하여 상세보기</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30">
+                          출처 {card.sources.length}건
+                        </Badge>
+                        {card.externalReferences?.length > 0 && (
+                          <Badge variant="outline" className="bg-accent/20 text-accent-foreground border-accent/30">
+                            <BookOpen className="w-3 h-3 mr-1" />
+                            외부 {card.externalReferences.length}건
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
