@@ -17,7 +17,8 @@ const routes: Record<ViewType, string> = {
   insights: "/insights",
   "diy-insights": "/diy-insights",
   research: "/research",
-  patents: "/patents"
+  patents: "/patents",
+  feedback: "/feedback"
 };
 
 export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
