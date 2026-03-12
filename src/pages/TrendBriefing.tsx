@@ -17,11 +17,17 @@ interface Source {
   url: string;
 }
 
+interface ExternalRef {
+  name: string;
+  description: string;
+}
+
 interface BriefingCard {
   title: string;
   summary: string;
   detail: string;
   sources: Source[];
+  externalReferences: ExternalRef[];
 }
 
 const TrendBriefing = () => {
