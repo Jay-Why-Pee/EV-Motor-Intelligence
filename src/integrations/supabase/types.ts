@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      briefing_history: {
+        Row: {
+          cards: Json
+          created_at: string
+          id: string
+          topic: string
+        }
+        Insert: {
+          cards?: Json
+          created_at?: string
+          id?: string
+          topic: string
+        }
+        Update: {
+          cards?: Json
+          created_at?: string
+          id?: string
+          topic?: string
+        }
+        Relationships: []
+      }
       insights: {
         Row: {
           content: string
