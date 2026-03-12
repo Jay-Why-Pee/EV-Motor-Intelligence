@@ -2,7 +2,7 @@ import { BarChart3, Newspaper, Search, Lightbulb, Sparkles, BookOpen, FileText, 
 import { Button } from "./ui/button";
 import { useNavigate, useLocation } from "react-router-dom";
 
-type ViewType = "charts" | "news" | "diy-news" | "trend-briefing" | "insights" | "diy-insights" | "research" | "patents";
+type ViewType = "charts" | "news" | "diy-news" | "trend-briefing" | "insights" | "diy-insights" | "research" | "patents" | "feedback";
 
 interface NavigationProps {
   activeView: ViewType;
