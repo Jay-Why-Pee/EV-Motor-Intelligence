@@ -220,6 +220,23 @@ const TrendBriefing = () => {
                     </div>
                   </div>
                 )}
+
+                {selectedCard.externalReferences?.length > 0 && (
+                  <div className="pt-4 border-t border-border">
+                    <h4 className="text-sm font-semibold mb-3 text-muted-foreground flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5" />
+                      AI 참고 자료
+                    </h4>
+                    <div className="space-y-2">
+                      {selectedCard.externalReferences.map((ref, i) => (
+                        <div key={i} className="p-3 rounded-md border border-border bg-muted/30">
+                          <span className="text-sm font-medium">{ref.name}</span>
+                          <p className="text-xs text-muted-foreground mt-1">{ref.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}
