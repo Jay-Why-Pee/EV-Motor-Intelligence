@@ -156,6 +156,7 @@ serve(async (req) => {
         summary: card.summary,
         detail: card.detail,
         sources,
+        externalReferences: card.externalReferences || [],
       };
     });
 
