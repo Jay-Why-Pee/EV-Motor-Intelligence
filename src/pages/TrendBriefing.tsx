@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, TrendingUp, ExternalLink, Calendar, Building2 } from "lucide-react";
+import { Loader2, TrendingUp, ExternalLink, Calendar, Building2, BookOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -17,11 +17,17 @@ interface Source {
   url: string;
 }
 
+interface ExternalRef {
+  name: string;
+  description: string;
+}
+
 interface BriefingCard {
   title: string;
   summary: string;
   detail: string;
   sources: Source[];
+  externalReferences: ExternalRef[];
 }
 
 const TrendBriefing = () => {
@@ -135,10 +141,17 @@ const TrendBriefing = () => {
                       {card.summary}
                     </p>
                     <div className="flex items-center justify-between pt-3 border-t border-border">
-                      <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30">
-                        출처 {card.sources.length}건
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">클릭하여 상세보기</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30">
+                          출처 {card.sources.length}건
+                        </Badge>
+                        {card.externalReferences?.length > 0 && (
+                          <Badge variant="outline" className="bg-accent/20 text-accent-foreground border-accent/30">
+                            <BookOpen className="w-3 h-3 mr-1" />
+                            외부 {card.externalReferences.length}건
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -204,6 +217,23 @@ const TrendBriefing = () => {
                           </a>
                         );
                       })}
+                    </div>
+                  </div>
+                )}
+
+                {selectedCard.externalReferences?.length > 0 && (
+                  <div className="pt-4 border-t border-border">
+                    <h4 className="text-sm font-semibold mb-3 text-muted-foreground flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5" />
+                      AI 참고 자료
+                    </h4>
+                    <div className="space-y-2">
+                      {selectedCard.externalReferences.map((ref, i) => (
+                        <div key={i} className="p-3 rounded-md border border-border bg-muted/30">
+                          <span className="text-sm font-medium">{ref.name}</span>
+                          <p className="text-xs text-muted-foreground mt-1">{ref.description}</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
