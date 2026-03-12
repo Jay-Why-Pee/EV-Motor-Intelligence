@@ -1,4 +1,4 @@
-import { BarChart3, Newspaper, Search, Lightbulb, Sparkles, BookOpen, FileText, TrendingUp } from "lucide-react";
+import { BarChart3, Newspaper, Search, Lightbulb, Sparkles, BookOpen, FileText, TrendingUp, MessageSquarePlus } from "lucide-react";
 import { Button } from "./ui/button";
 import { useNavigate, useLocation } from "react-router-dom";
 
