@@ -160,6 +160,23 @@ serve(async (req) => {
       };
     });
 
+    // Save to briefing_history
+    await supabase.from('briefing_history').insert({
+      topic: topic.trim(),
+      cards: JSON.stringify(cards),
+    });
+
+    // Keep only the latest 10 records
+    const { data: allHistory } = await supabase
+      .from('briefing_history')
+      .select('id')
+      .order('created_at', { ascending: false });
+
+    if (allHistory && allHistory.length > 10) {
+      const idsToDelete = allHistory.slice(10).map((h: any) => h.id);
+      await supabase.from('briefing_history').delete().in('id', idsToDelete);
+    }
+
     return new Response(
       JSON.stringify({ cards }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
