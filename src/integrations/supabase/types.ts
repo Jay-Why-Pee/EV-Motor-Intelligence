@@ -35,6 +35,30 @@ export type Database = {
         }
         Relationships: []
       }
+      feedback: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          message: string
+          mood: number
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          id?: string
+          message: string
+          mood?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          message?: string
+          mood?: number
+        }
+        Relationships: []
+      }
       insights: {
         Row: {
           content: string
