@@ -112,6 +112,15 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <span className="hidden sm:inline">특허</span>
             <span className="sm:hidden">특허</span>
           </Button>
+          <Button
+            variant={currentView === "feedback" ? "default" : "ghost"}
+            onClick={() => handleNavigation("feedback")}
+            className="flex items-center gap-2 shrink-0"
+          >
+            <MessageSquarePlus className="w-4 h-4" />
+            <span className="hidden sm:inline">피드백</span>
+            <span className="sm:hidden">피드백</span>
+          </Button>
         </div>
       </div>
     </nav>
