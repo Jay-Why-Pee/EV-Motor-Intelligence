@@ -41,6 +41,15 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
       <div className="container mx-auto px-4 py-3">
         <div className="flex gap-2 overflow-x-auto">
           <Button
+            variant={currentView === "trend-briefing" ? "default" : "ghost"}
+            onClick={() => handleNavigation("trend-briefing")}
+            className="flex items-center gap-2 shrink-0"
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span className="hidden sm:inline">트렌드 브리핑</span>
+            <span className="sm:hidden">브리핑</span>
+          </Button>
+          <Button
             variant={currentView === "charts" ? "default" : "ghost"}
             onClick={() => handleNavigation("charts")}
             className="flex items-center gap-2 shrink-0"
@@ -66,15 +75,6 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
             <Search className="w-4 h-4" />
             <span className="hidden sm:inline">뉴스 DIY</span>
             <span className="sm:hidden">뉴스DIY</span>
-          </Button>
-          <Button
-            variant={currentView === "trend-briefing" ? "default" : "ghost"}
-            onClick={() => handleNavigation("trend-briefing")}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <TrendingUp className="w-4 h-4" />
-            <span className="hidden sm:inline">트렌드 브리핑</span>
-            <span className="sm:hidden">브리핑</span>
           </Button>
           <Button
             variant={currentView === "insights" ? "default" : "ghost"}
