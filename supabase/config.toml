@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.trend-briefing]
 verify_jwt = false
+
+[functions.analyze-dashboard]
+verify_jwt = false
