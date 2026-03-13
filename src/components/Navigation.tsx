@@ -10,10 +10,10 @@ interface NavigationProps {
 }
 
 const routes: Record<ViewType, string> = {
-  charts: "/",
+  "trend-briefing": "/",
+  charts: "/charts",
   news: "/news",
   "diy-news": "/diy-news",
-  "trend-briefing": "/trend-briefing",
   insights: "/insights",
   "diy-insights": "/diy-insights",
   research: "/research",
