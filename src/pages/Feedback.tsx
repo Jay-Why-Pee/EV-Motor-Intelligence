@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Navigation } from "@/components/Navigation";
+import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { MessageSquarePlus, Sparkles, Send, ThumbsUp, Clock, Tag } from "lucide-react";
+import { MessageSquarePlus, Sparkles, Send, Clock, Tag, Brain, Loader2, TrendingUp, Wrench, BarChart3 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -31,6 +32,13 @@ interface FeedbackItem {
   created_at: string;
 }
 
+interface FeedbackSummary {
+  overallMood: string;
+  topDemands: { title: string; description: string; count: number }[];
+  improvements: { title: string; description: string; count: number }[];
+  summary: string;
+}
+
 const Feedback = () => {
   const { toast } = useToast();
   const [message, setMessage] = useState("");
@@ -39,9 +47,12 @@ const Feedback = () => {
   const [submitting, setSubmitting] = useState(false);
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [summary, setSummary] = useState<FeedbackSummary | null>(null);
+  const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
 
   useEffect(() => {
     fetchFeedbacks();
+    fetchSummary();
   }, []);
 
   const fetchFeedbacks = async () => {
@@ -49,8 +60,22 @@ const Feedback = () => {
       .from("feedback")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(50);
     if (data) setFeedbacks(data);
+  };
+
+  const fetchSummary = async () => {
+    setAnalyzingFeedback(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-feedback");
+      if (!error && data?.summary) {
+        setSummary(data.summary);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setAnalyzingFeedback(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -81,7 +106,7 @@ const Feedback = () => {
       <Header />
       <Navigation activeView="feedback" />
 
-      {/* Hero section with creative gradient */}
+      {/* Hero section */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-violet-600/10 via-fuchsia-500/5 to-amber-500/10" />
         <div className="absolute top-10 left-10 w-72 h-72 bg-violet-500/10 rounded-full blur-3xl animate-pulse" />
@@ -180,6 +205,92 @@ const Feedback = () => {
         </div>
       </div>
 
+      {/* AI Feedback Analysis Section */}
+      <div className="container mx-auto px-4 py-10">
+        <div className="flex items-center gap-3 mb-6">
+          <Brain className="w-5 h-5 text-fuchsia-400" />
+          <h2 className="text-xl font-bold text-foreground">피드백 종합 분석</h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={fetchSummary}
+            disabled={analyzingFeedback}
+            className="ml-auto text-xs"
+          >
+            {analyzingFeedback ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}
+            {analyzingFeedback ? "분석 중..." : "새로 분석"}
+          </Button>
+        </div>
+
+        {analyzingFeedback && !summary ? (
+          <Card className="p-8 bg-card/50 border-border/50 text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-fuchsia-400 mx-auto mb-3" />
+            <p className="text-muted-foreground">피드백을 AI가 분석하고 있습니다...</p>
+          </Card>
+        ) : summary ? (
+          <div className="space-y-4">
+            {/* Overall summary */}
+            <Card className="p-5 bg-gradient-to-r from-fuchsia-500/10 to-violet-500/10 border-fuchsia-500/20">
+              <div className="flex items-start gap-3">
+                <BarChart3 className="w-5 h-5 text-fuchsia-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-foreground mb-1">{summary.overallMood}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{summary.summary}</p>
+                </div>
+              </div>
+            </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Top demands */}
+              {summary.topDemands && summary.topDemands.length > 0 && (
+                <Card className="p-5 bg-card/50 border-border/50">
+                  <div className="flex items-center gap-2 mb-4">
+                    <TrendingUp className="w-4 h-4 text-violet-400" />
+                    <h3 className="text-sm font-semibold text-foreground">주요 수요</h3>
+                  </div>
+                  <div className="space-y-3">
+                    {summary.topDemands.map((d, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-xs bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{d.count}건</span>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{d.title}</p>
+                          <p className="text-xs text-muted-foreground">{d.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* Improvements */}
+              {summary.improvements && summary.improvements.length > 0 && (
+                <Card className="p-5 bg-card/50 border-border/50">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Wrench className="w-4 h-4 text-amber-400" />
+                    <h3 className="text-sm font-semibold text-foreground">개선 요청</h3>
+                  </div>
+                  <div className="space-y-3">
+                    {summary.improvements.map((d, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-xs bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{d.count}건</span>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{d.title}</p>
+                          <p className="text-xs text-muted-foreground">{d.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+            </div>
+          </div>
+        ) : (
+          <Card className="p-6 bg-card/50 border-border/50 text-center">
+            <p className="text-muted-foreground text-sm">피드백이 쌓이면 AI가 종합 분석 결과를 보여드립니다.</p>
+          </Card>
+        )}
+      </div>
+
       {/* Previous feedbacks */}
       {feedbacks.length > 0 && (
         <div className="container mx-auto px-4 py-10">
@@ -221,6 +332,8 @@ const Feedback = () => {
           </div>
         </div>
       )}
+
+      <Footer />
     </div>
   );
 };
