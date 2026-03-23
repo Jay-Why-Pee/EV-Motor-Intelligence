@@ -239,7 +239,9 @@ export const NewsView = () => {
       {/* News Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {displayedNews.map(article => (
-          <NewsCard key={article.id} {...article} onClick={() => setSelectedArticle(article)} />
+          <a key={article.id} href={article.url} target="_blank" rel="noopener noreferrer" className="block h-full">
+            <NewsCard {...article} />
+          </a>
         ))}
       </div>
 
@@ -254,44 +256,6 @@ export const NewsView = () => {
           </Button>
         </div>
       )}
-
-      {/* Article Detail Dialog */}
-      <Dialog open={!!selectedArticle} onOpenChange={(open) => !open && setSelectedArticle(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          {selectedArticle && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-xl leading-relaxed">{selectedArticle.title_kr}</DialogTitle>
-                <DialogDescription className="flex items-center gap-3 text-sm">
-                  <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{selectedArticle.source}</span>
-                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{selectedArticle.date}</span>
-                </DialogDescription>
-              </DialogHeader>
-              <div className="mt-4 space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  {selectedArticle.category.map((cat, i) => (
-                    <Badge key={i} variant="outline" className="bg-primary/20 text-primary border-primary/30">{cat}</Badge>
-                  ))}
-                </div>
-                <div className="bg-muted/30 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold mb-2">📝 AI 요약</h4>
-                  <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line">{selectedArticle.summary}</p>
-                </div>
-                {selectedArticle.url && selectedArticle.url.startsWith('http') && (
-                  <div className="pt-4 border-t border-border">
-                    <h4 className="text-sm font-semibold mb-2 text-muted-foreground">원본 기사</h4>
-                    <a href={selectedArticle.url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-2 p-3 rounded-md border border-border hover:border-primary/50 transition-colors text-sm">
-                      <ExternalLink className="w-4 h-4 text-primary shrink-0" />
-                      <span className="line-clamp-1">{selectedArticle.title}</span>
-                    </a>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
