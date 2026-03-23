@@ -3,9 +3,8 @@ import { NewsCard } from "./NewsCard";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, RefreshCw, Brain, ExternalLink, Building2, Calendar } from "lucide-react";
+import { Loader2, RefreshCw, Brain, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type Category = "all" | "Asia" | "Europe" | "North America" | "China" | "GM" | "Ford" | "Mercedes-Benz" | "BMW" | "Volkswagen" | "Honda" | "Hyundai" | "Stellantis" | "Toyota" | "Tesla" | "Nissan" | "Renault" | "BYD" | "Xiaomi" | "Geely" | "Bosch" | "ZF" | "Schaeffler" | "LG Magna" | "Denso" | "Magna" | "Hyundai Mobis" | "AISIN" | "BorgWarner" | "Hitachi Astemo" | "Other";
