@@ -1,8 +1,8 @@
-import { BarChart3, Newspaper, Search, Lightbulb, Sparkles, BookOpen, FileText, TrendingUp, MessageSquarePlus } from "lucide-react";
+import { BarChart3, Newspaper, Search, Lightbulb, Sparkles, BookOpen, FileText, TrendingUp, MessageSquarePlus, HelpCircle, History } from "lucide-react";
 import { Button } from "./ui/button";
 import { useNavigate, useLocation } from "react-router-dom";
 
-type ViewType = "charts" | "news" | "diy-news" | "trend-briefing" | "insights" | "diy-insights" | "research" | "patents" | "feedback";
+type ViewType = "guide" | "trend-briefing" | "charts" | "news" | "diy-news" | "insights" | "diy-insights" | "research" | "patents" | "feedback" | "changelog";
 
 interface NavigationProps {
   activeView: ViewType;
@@ -10,6 +10,7 @@ interface NavigationProps {
 }
 
 const routes: Record<ViewType, string> = {
+  guide: "/guide",
   "trend-briefing": "/",
   charts: "/charts",
   news: "/news",
@@ -18,8 +19,23 @@ const routes: Record<ViewType, string> = {
   "diy-insights": "/diy-insights",
   research: "/research",
   patents: "/patents",
-  feedback: "/feedback"
+  feedback: "/feedback",
+  changelog: "/changelog",
 };
+
+const navItems: { view: ViewType; icon: typeof HelpCircle; label: string; shortLabel: string }[] = [
+  { view: "guide", icon: HelpCircle, label: "가이드", shortLabel: "가이드" },
+  { view: "trend-briefing", icon: TrendingUp, label: "트렌드 브리핑", shortLabel: "브리핑" },
+  { view: "charts", icon: BarChart3, label: "차트", shortLabel: "차트" },
+  { view: "news", icon: Newspaper, label: "뉴스", shortLabel: "뉴스" },
+  { view: "diy-news", icon: Search, label: "뉴스 DIY", shortLabel: "뉴스DIY" },
+  { view: "insights", icon: Lightbulb, label: "인사이트", shortLabel: "인사이트" },
+  { view: "diy-insights", icon: Sparkles, label: "인사이트 DIY", shortLabel: "DIY" },
+  { view: "research", icon: BookOpen, label: "논문", shortLabel: "논문" },
+  { view: "patents", icon: FileText, label: "특허", shortLabel: "특허" },
+  { view: "feedback", icon: MessageSquarePlus, label: "피드백", shortLabel: "피드백" },
+  { view: "changelog", icon: History, label: "변경이력", shortLabel: "이력" },
+];
 
 export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
   const navigate = useNavigate();
@@ -40,87 +56,18 @@ export const Navigation = ({ activeView, onViewChange }: NavigationProps) => {
     <nav className="border-b border-border bg-card/30 backdrop-blur-sm sticky top-[88px] md:top-[104px] z-40">
       <div className="container mx-auto px-4 py-3">
         <div className="flex gap-2 overflow-x-auto">
-          <Button
-            variant={currentView === "trend-briefing" ? "default" : "ghost"}
-            onClick={() => handleNavigation("trend-briefing")}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <TrendingUp className="w-4 h-4" />
-            <span className="hidden sm:inline">트렌드 브리핑</span>
-            <span className="sm:hidden">브리핑</span>
-          </Button>
-          <Button
-            variant={currentView === "charts" ? "default" : "ghost"}
-            onClick={() => handleNavigation("charts")}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span className="hidden sm:inline">차트</span>
-            <span className="sm:hidden">차트</span>
-          </Button>
-          <Button
-            variant={currentView === "news" ? "default" : "ghost"}
-            onClick={() => handleNavigation("news")}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <Newspaper className="w-4 h-4" />
-            <span className="hidden sm:inline">뉴스</span>
-            <span className="sm:hidden">뉴스</span>
-          </Button>
-          <Button
-            variant={currentView === "diy-news" ? "default" : "ghost"}
-            onClick={() => handleNavigation("diy-news")}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <Search className="w-4 h-4" />
-            <span className="hidden sm:inline">뉴스 DIY</span>
-            <span className="sm:hidden">뉴스DIY</span>
-          </Button>
-          <Button
-            variant={currentView === "insights" ? "default" : "ghost"}
-            onClick={() => handleNavigation("insights")}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <Lightbulb className="w-4 h-4" />
-            <span className="hidden sm:inline">인사이트</span>
-            <span className="sm:hidden">인사이트</span>
-          </Button>
-          <Button
-            variant={currentView === "diy-insights" ? "default" : "ghost"}
-            onClick={() => handleNavigation("diy-insights")}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span className="hidden sm:inline">인사이트 DIY</span>
-            <span className="sm:hidden">DIY</span>
-          </Button>
-          <Button
-            variant={currentView === "research" ? "default" : "ghost"}
-            onClick={() => handleNavigation("research")}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <BookOpen className="w-4 h-4" />
-            <span className="hidden sm:inline">논문</span>
-            <span className="sm:hidden">논문</span>
-          </Button>
-          <Button
-            variant={currentView === "patents" ? "default" : "ghost"}
-            onClick={() => handleNavigation("patents")}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <FileText className="w-4 h-4" />
-            <span className="hidden sm:inline">특허</span>
-            <span className="sm:hidden">특허</span>
-          </Button>
-          <Button
-            variant={currentView === "feedback" ? "default" : "ghost"}
-            onClick={() => handleNavigation("feedback")}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <MessageSquarePlus className="w-4 h-4" />
-            <span className="hidden sm:inline">피드백</span>
-            <span className="sm:hidden">피드백</span>
-          </Button>
+          {navItems.map(({ view, icon: Icon, label, shortLabel }) => (
+            <Button
+              key={view}
+              variant={currentView === view ? "default" : "ghost"}
+              onClick={() => handleNavigation(view)}
+              className="flex items-center gap-2 shrink-0"
+            >
+              <Icon className="w-4 h-4" />
+              <span className="hidden sm:inline">{label}</span>
+              <span className="sm:hidden">{shortLabel}</span>
+            </Button>
+          ))}
         </div>
       </div>
     </nav>

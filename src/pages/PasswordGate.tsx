@@ -155,7 +155,7 @@ const PasswordGate = ({ onAuthenticated }: PasswordGateProps) => {
         {/* Bottom branding */}
         <div className="mt-16 text-center">
           <p className="text-[11px] text-muted-foreground/30 tracking-widest uppercase">
-            © 2026 AX Project · EV Motor Intelligence
+            © 2026 EV Motor Lens · EV Motor Landscape
           </p>
         </div>
       </div>

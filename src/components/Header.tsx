@@ -16,10 +16,10 @@ export const Header = () => {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-2xl md:text-4xl font-bold text-gradient mb-2">
-              글로벌 EV 모터 시장 분석 대시보드
+              EV Motor Landscape
             </h1>
             <p className="text-muted-foreground text-sm md:text-base">
-              실시간 시장 인텔리전스 & 뉴스 모니터링
+              실시간 시장 인텔리전스 & 트렌드 모니터링
             </p>
           </div>
           <div className="flex items-center gap-3 text-sm">
