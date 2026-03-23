@@ -8,8 +8,6 @@ import PasswordGate from "./pages/PasswordGate";
 import Index from "./pages/Index";
 import News from "./pages/News";
 import Insights from "./pages/Insights";
-import DiyInsights from "./pages/DiyInsights";
-import DiyNews from "./pages/DiyNews";
 import TrendBriefing from "./pages/TrendBriefing";
 import Research from "./pages/Research";
 import Patents from "./pages/Patents";
@@ -48,9 +46,7 @@ const App = () => {
             <Route path="/guide" element={<Guide />} />
             <Route path="/charts" element={<Index />} />
             <Route path="/news" element={<News />} />
-            <Route path="/diy-news" element={<DiyNews />} />
             <Route path="/insights" element={<Insights />} />
-            <Route path="/diy-insights" element={<DiyInsights />} />
             <Route path="/research" element={<Research />} />
             <Route path="/patents" element={<Patents />} />
             <Route path="/feedback" element={<Feedback />} />

@@ -10,12 +10,11 @@ interface NewsCardProps {
   source: string;
   date: string;
   url: string;
-  onClick?: () => void;
 }
 
-export const NewsCard = ({ title_kr, summary, category, source, date, onClick }: NewsCardProps) => {
+export const NewsCard = ({ title_kr, summary, category, source, date }: NewsCardProps) => {
   return (
-    <div onClick={onClick} className="block h-full cursor-pointer">
+    <div className="block h-full">
       <Card className="p-5 card-glow group h-full flex flex-col hover:shadow-lg transition-shadow">
         <div className="flex flex-wrap gap-2 mb-3">
           {category.map((cat, idx) => (

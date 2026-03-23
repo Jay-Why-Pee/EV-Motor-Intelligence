@@ -2,7 +2,7 @@ import { Header } from "@/components/Header";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
-import { TrendingUp, BarChart3, Newspaper, Search, Lightbulb, Sparkles, BookOpen, FileText, MessageSquarePlus, History, type LucideIcon } from "lucide-react";
+import { TrendingUp, BarChart3, Newspaper, Lightbulb, BookOpen, FileText, MessageSquarePlus, History, type LucideIcon } from "lucide-react";
 
 interface PageInfo {
   icon: LucideIcon;
@@ -25,20 +25,14 @@ const pages: PageInfo[] = [
     title: "차트",
     description: "뉴스·논문·특허 데이터를 기반으로 AI가 생성한 시그널 차트를 제공합니다. 기술 키워드 트렌드, OEM 히트맵, 정책 동향, 연구 주제 분석, 특허 출원량 등을 시각화합니다.",
     howToUse: "'데이터 분석 시작' 버튼으로 최신 데이터를 분석하거나, 이미 생성된 차트를 뉴스/논문/특허 탭별로 확인하세요.",
-    tips: ["매일 오전 6시(KST)에 자동 업데이트됩니다"],
+    tips: ["격일 오전 6시(KST)에 자동 업데이트됩니다"],
   },
   {
     icon: Newspaper,
     title: "뉴스",
-    description: "EV 모터 관련 뉴스를 지역별, OEM별, 부품사별 카테고리로 분류하여 제공합니다. 카드를 클릭하면 AI 요약 내용과 원본 기사 링크를 확인할 수 있습니다.",
-    howToUse: "카테고리 버튼으로 필터링 → 'AI 분석' 버튼으로 해당 카테고리의 종합 분석 확인 → 개별 뉴스 카드 클릭으로 상세 내용 확인",
+    description: "EV 모터 관련 뉴스를 지역별, OEM별, 부품사별 카테고리로 분류하여 제공합니다. 뉴스 카드를 클릭하면 원본 기사로 이동합니다.",
+    howToUse: "카테고리 버튼으로 필터링 → 'AI 분석' 버튼으로 해당 카테고리의 종합 분석 확인 → 개별 뉴스 카드 클릭으로 원본 기사 열람",
     tips: ["'뉴스 크롤링' 버튼으로 최신 뉴스를 즉시 수집할 수 있습니다"],
-  },
-  {
-    icon: Search,
-    title: "뉴스 DIY",
-    description: "특정 주제에 관련된 뉴스를 직접 검색할 수 있습니다. AI가 수집된 뉴스 중 검색 의도에 가장 부합하는 상위 기사를 추출합니다.",
-    howToUse: "검색창에 관심 키워드를 입력하고 검색하세요.",
   },
   {
     icon: Lightbulb,
@@ -47,21 +41,15 @@ const pages: PageInfo[] = [
     howToUse: "페이지를 열면 최신 인사이트가 자동으로 표시됩니다.",
   },
   {
-    icon: Sparkles,
-    title: "인사이트 DIY",
-    description: "원하는 주제에 대해 AI가 맞춤형 인사이트를 생성해드립니다.",
-    howToUse: "분석 주제를 입력하고 '생성' 버튼을 클릭하세요.",
-  },
-  {
     icon: BookOpen,
     title: "논문",
-    description: "EV 모터 기술 관련 최신 연구 논문 동향을 AI가 분석하여 제공합니다. 매일 업데이트되며 최대 333개까지 누적됩니다. 상단에 AI 종합 분석이 표시됩니다.",
+    description: "EV 모터 기술 관련 최신 연구 논문 동향을 AI가 분석하여 제공합니다. 격일 업데이트되며 최대 333개까지 누적됩니다. 상단에 AI 종합 분석이 표시됩니다.",
     howToUse: "논문 카드를 클릭하면 관련 학술 검색 페이지로 이동합니다. 키워드 태그로 기술 트렌드를 파악하세요.",
   },
   {
     icon: FileText,
     title: "특허",
-    description: "주요 기업들의 EV 모터 관련 특허 출원 동향을 분석합니다. 매일 업데이트되며 최대 333개까지 누적됩니다.",
+    description: "주요 기업들의 EV 모터 관련 특허 출원 동향을 분석합니다. 격일 업데이트되며 최대 333개까지 누적됩니다.",
     howToUse: "특허 카드를 클릭하면 Google Patents 검색 페이지로 이동합니다.",
   },
   {

@@ -1,8 +1,8 @@
-import { BarChart3, Newspaper, Search, Lightbulb, Sparkles, BookOpen, FileText, TrendingUp, MessageSquarePlus, HelpCircle, History } from "lucide-react";
+import { BarChart3, Newspaper, Lightbulb, BookOpen, FileText, TrendingUp, MessageSquarePlus, HelpCircle, History } from "lucide-react";
 import { Button } from "./ui/button";
 import { useNavigate, useLocation } from "react-router-dom";
 
-type ViewType = "guide" | "trend-briefing" | "charts" | "news" | "diy-news" | "insights" | "diy-insights" | "research" | "patents" | "feedback" | "changelog";
+type ViewType = "guide" | "trend-briefing" | "charts" | "news" | "insights" | "research" | "patents" | "feedback" | "changelog";
 
 interface NavigationProps {
   activeView: ViewType;
@@ -14,9 +14,7 @@ const routes: Record<ViewType, string> = {
   "trend-briefing": "/",
   charts: "/charts",
   news: "/news",
-  "diy-news": "/diy-news",
   insights: "/insights",
-  "diy-insights": "/diy-insights",
   research: "/research",
   patents: "/patents",
   feedback: "/feedback",
@@ -28,9 +26,7 @@ const navItems: { view: ViewType; icon: typeof HelpCircle; label: string; shortL
   { view: "trend-briefing", icon: TrendingUp, label: "트렌드 브리핑", shortLabel: "브리핑" },
   { view: "charts", icon: BarChart3, label: "차트", shortLabel: "차트" },
   { view: "news", icon: Newspaper, label: "뉴스", shortLabel: "뉴스" },
-  { view: "diy-news", icon: Search, label: "뉴스 DIY", shortLabel: "뉴스DIY" },
   { view: "insights", icon: Lightbulb, label: "인사이트", shortLabel: "인사이트" },
-  { view: "diy-insights", icon: Sparkles, label: "인사이트 DIY", shortLabel: "DIY" },
   { view: "research", icon: BookOpen, label: "논문", shortLabel: "논문" },
   { view: "patents", icon: FileText, label: "특허", shortLabel: "특허" },
   { view: "feedback", icon: MessageSquarePlus, label: "피드백", shortLabel: "피드백" },
