@@ -1,0 +1,1 @@
+DROP POLICY "Anyone can update visit_counter" ON public.visit_counter;
