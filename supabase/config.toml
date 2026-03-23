@@ -20,3 +20,18 @@ verify_jwt = false
 
 [functions.analyze-dashboard]
 verify_jwt = false
+
+[functions.analyze-feedback]
+verify_jwt = false
+
+[functions.analyze-news-category]
+verify_jwt = false
+
+[functions.manage-feedback]
+verify_jwt = false
+
+[functions.verify-site-password]
+verify_jwt = false
+
+[functions.change-site-password]
+verify_jwt = false
