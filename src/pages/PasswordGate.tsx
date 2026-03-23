@@ -94,13 +94,13 @@ const PasswordGate = ({ onAuthenticated }: PasswordGateProps) => {
         {/* Logo / Brand */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-6">
-            <span className="text-2xl font-black text-gradient">AX</span>
+            <span className="text-2xl font-black text-gradient">ML</span>
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2">
-            AX Project
+            EV Motor Lens
           </h1>
           <p className="text-muted-foreground text-sm tracking-wide">
-            EV Motor Market Intelligence
+            EV Motor Landscape
           </p>
         </div>
 
