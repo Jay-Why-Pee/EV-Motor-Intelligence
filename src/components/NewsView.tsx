@@ -32,7 +32,7 @@ export const NewsView = () => {
   const [loading, setLoading] = useState(true);
   const [displayCount, setDisplayCount] = useState(20);
   const [crawling, setCrawling] = useState(false);
-  const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
+  
   const [categoryInsights, setCategoryInsights] = useState<CategoryInsight[] | null>(null);
   const [analyzingCategory, setAnalyzingCategory] = useState(false);
   const [insightCache, setInsightCache] = useState<Record<string, CategoryInsight[]>>({});
