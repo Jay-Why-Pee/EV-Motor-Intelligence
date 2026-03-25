@@ -54,6 +54,7 @@ const App = () => {
             <Route path="/changelog" element={<Changelog />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <ExitIntentDialog />
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
