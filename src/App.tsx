@@ -15,6 +15,7 @@ import Feedback from "./pages/Feedback";
 import Guide from "./pages/Guide";
 import Changelog from "./pages/Changelog";
 import NotFound from "./pages/NotFound";
+import { ExitIntentDialog } from "./components/ExitIntentDialog";
 
 const queryClient = new QueryClient();
 
