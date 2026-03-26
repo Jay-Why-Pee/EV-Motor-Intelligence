@@ -34,6 +34,20 @@ interface Props {
 }
 
 const columns = [
+  { key: "year", label: "연도" },
+  { key: "oem", label: "OEM" },
+  { key: "model", label: "차종" },
+  { key: "powertrain", label: "PT" },
+  { key: "motorPosition", label: "위치" },
+  { key: "motorSupplier", label: "공급사" },
+  { key: "torqueNm", label: "Nm" },
+  { key: "powerKw", label: "kW" },
+  { key: "maxSpeedRpm", label: "rpm" },
+  { key: "rangeKm", label: "km" },
+  { key: "notable", label: "기술" },
+];
+
+const fullColumns = [
   { key: "year", label: "출시년도" },
   { key: "oem", label: "OEM" },
   { key: "model", label: "차종" },
@@ -85,35 +99,38 @@ const getSpeedNumeric = (spec: MotorSpec): number => {
   return nums.length ? Math.max(...nums) : 0;
 };
 
-const SpecTable = ({ specs }: { specs: MotorSpec[] }) => (
-  <div className="overflow-x-auto">
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {columns.map(col => (
-            <TableHead key={col.key} className="whitespace-nowrap text-sm font-semibold">
-              {col.label}
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {specs.map((spec, idx) => (
-          <TableRow key={idx}>
-            {columns.map(col => {
-              const raw = getCellValue(spec, col.key);
-              return (
-                <TableCell key={col.key} className="whitespace-nowrap text-sm">
-                  {formatCell(col.key, raw)}
-                </TableCell>
-              );
-            })}
+const SpecTable = ({ specs, cols }: { specs: MotorSpec[]; cols?: typeof columns }) => {
+  const useCols = cols || columns;
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {useCols.map(col => (
+              <TableHead key={col.key} className="whitespace-nowrap text-xs font-semibold px-2">
+                {col.label}
+              </TableHead>
+            ))}
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  </div>
-);
+        </TableHeader>
+        <TableBody>
+          {specs.map((spec, idx) => (
+            <TableRow key={idx}>
+              {useCols.map(col => {
+                const raw = getCellValue(spec, col.key);
+                return (
+                  <TableCell key={col.key} className="whitespace-nowrap text-xs px-2">
+                    {formatCell(col.key, raw)}
+                  </TableCell>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
 
 export const MotorSpecsTable = ({ data }: Props) => {
   const [expanded, setExpanded] = useState(false);
