@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Download } from "lucide-react";
 import { ScrollArea } from "../ui/scroll-area";
 
 interface MotorSpec {
@@ -34,6 +34,20 @@ interface Props {
 }
 
 const columns = [
+  { key: "year", label: "연도" },
+  { key: "oem", label: "OEM" },
+  { key: "model", label: "차종" },
+  { key: "powertrain", label: "PT" },
+  { key: "motorPosition", label: "위치" },
+  { key: "motorSupplier", label: "공급사" },
+  { key: "torqueNm", label: "Nm" },
+  { key: "powerKw", label: "kW" },
+  { key: "maxSpeedRpm", label: "rpm" },
+  { key: "rangeKm", label: "km" },
+  { key: "notable", label: "기술" },
+];
+
+const fullColumns = [
   { key: "year", label: "출시년도" },
   { key: "oem", label: "OEM" },
   { key: "model", label: "차종" },
@@ -85,35 +99,38 @@ const getSpeedNumeric = (spec: MotorSpec): number => {
   return nums.length ? Math.max(...nums) : 0;
 };
 
-const SpecTable = ({ specs }: { specs: MotorSpec[] }) => (
-  <div className="overflow-x-auto">
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {columns.map(col => (
-            <TableHead key={col.key} className="whitespace-nowrap text-sm font-semibold">
-              {col.label}
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {specs.map((spec, idx) => (
-          <TableRow key={idx}>
-            {columns.map(col => {
-              const raw = getCellValue(spec, col.key);
-              return (
-                <TableCell key={col.key} className="whitespace-nowrap text-sm">
-                  {formatCell(col.key, raw)}
-                </TableCell>
-              );
-            })}
+const SpecTable = ({ specs, cols }: { specs: MotorSpec[]; cols?: typeof columns }) => {
+  const useCols = cols || columns;
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {useCols.map(col => (
+              <TableHead key={col.key} className="whitespace-nowrap text-xs font-semibold px-2">
+                {col.label}
+              </TableHead>
+            ))}
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  </div>
-);
+        </TableHeader>
+        <TableBody>
+          {specs.map((spec, idx) => (
+            <TableRow key={idx}>
+              {useCols.map(col => {
+                const raw = getCellValue(spec, col.key);
+                return (
+                  <TableCell key={col.key} className="whitespace-nowrap text-xs px-2">
+                    {formatCell(col.key, raw)}
+                  </TableCell>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
 
 export const MotorSpecsTable = ({ data }: Props) => {
   const [expanded, setExpanded] = useState(false);
@@ -207,6 +224,25 @@ export const MotorSpecsTable = ({ data }: Props) => {
     </div>
   );
 
+  const handleCsvDownload = () => {
+    const csvCols = fullColumns;
+    const header = csvCols.map(c => c.label).join(",");
+    const rows = filtered.map(spec =>
+      csvCols.map(c => {
+        const val = formatCell(c.key, getCellValue(spec, c.key));
+        return `"${val.replace(/"/g, '""')}"`;
+      }).join(",")
+    );
+    const csv = "\uFEFF" + [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ev_motor_specs_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       <Card className="p-4 md:p-6 card-glow">
@@ -215,6 +251,10 @@ export const MotorSpecsTable = ({ data }: Props) => {
             <h3 className="text-lg font-bold mb-1">⚡ EV/HEV Motor Specs Database</h3>
             <p className="text-sm text-muted-foreground">글로벌 전기·하이브리드 차량 탑재 모터 성능 비교 ({filtered.length}개 차종)</p>
           </div>
+          <Button variant="outline" size="sm" onClick={handleCsvDownload} className="gap-2">
+            <Download className="w-4 h-4" />
+            CSV
+          </Button>
         </div>
         <Filters />
         <SpecTable specs={preview} />
@@ -248,7 +288,7 @@ export const MotorSpecsTable = ({ data }: Props) => {
           </DialogHeader>
           <Filters />
           <ScrollArea className="h-[65vh]">
-            <SpecTable specs={filtered} />
+            <SpecTable specs={filtered} cols={fullColumns} />
           </ScrollArea>
         </DialogContent>
       </Dialog>
