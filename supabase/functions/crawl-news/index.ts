@@ -3,20 +3,22 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   // Auth check: only allow requests with valid project keys
   const authHeader = req.headers.get('Authorization');
+  const apikeyHeader = req.headers.get('apikey') || '';
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
   const token = authHeader?.replace('Bearer ', '') || '';
-  if (!authHeader || (token !== anonKey && token !== serviceKey)) {
+  const authorized = token === anonKey || token === serviceKey || apikeyHeader === anonKey || apikeyHeader === serviceKey;
+  if (!authorized) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
   }
 
@@ -288,16 +290,26 @@ Important:
 
     console.log(`Upserted: ${classified.length}`);
 
-    // Auto-trigger analyze-news and analyze-dashboard after crawling
+    // Auto-trigger all analytics functions after crawling
     const fnUrl = (name: string) => `${SUPABASE_URL}/functions/v1/${name}`;
     const fnHeaders = { 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' };
+    const analysisFunctions = ['analyze-news', 'analyze-dashboard', 'analyze-market-data'];
 
     try {
-      console.log('Auto-triggering analyze-news...');
-      await fetch(fnUrl('analyze-news'), { method: 'POST', headers: fnHeaders });
-      console.log('Auto-triggering analyze-dashboard...');
-      await fetch(fnUrl('analyze-dashboard'), { method: 'POST', headers: fnHeaders });
-      console.log('All analyses triggered successfully');
+      const triggerResults = await Promise.allSettled(
+        analysisFunctions.map((name) => fetch(fnUrl(name), { method: 'POST', headers: fnHeaders }))
+      );
+
+      triggerResults.forEach((result, index) => {
+        const fn = analysisFunctions[index];
+        if (result.status === 'fulfilled') {
+          console.log(`Auto-triggered ${fn}: ${result.value.status}`);
+        } else {
+          console.error(`Failed to auto-trigger ${fn}:`, result.reason);
+        }
+      });
+
+      console.log('Analytics functions trigger completed');
     } catch (e) {
       console.error('Error triggering analyses:', e);
     }
