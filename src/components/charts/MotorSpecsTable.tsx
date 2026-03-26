@@ -68,8 +68,11 @@ const formatCell = (key: string, val: string): string => {
   }
   // For torque, power, maxSpeed — strip units, show numbers only (units are in header)
   if (key === "torqueNm" || key === "powerKw" || key === "maxSpeedRpm") {
-    // Support slash-separated dual motor values like "300/200"
     const cleaned = String(val).replace(/\s*(Nm|kW|rpm)\s*/gi, "").trim();
+    return cleaned;
+  }
+  if (key === "rangeKm") {
+    const cleaned = String(val).replace(/\s*(km|mi)\s*/gi, "").trim();
     return cleaned;
   }
   return val;
@@ -117,6 +120,7 @@ export const MotorSpecsTable = ({ data }: Props) => {
   const [yearFilter, setYearFilter] = useState("all");
   const [oemFilter, setOemFilter] = useState("all");
   const [speedFilter, setSpeedFilter] = useState("all");
+  const [powertrainFilter, setPowertrainFilter] = useState("all");
 
   const sorted = useMemo(() =>
     data?.length
@@ -127,11 +131,13 @@ export const MotorSpecsTable = ({ data }: Props) => {
 
   const years = useMemo(() => [...new Set(sorted.map(s => s.year).filter(y => y !== "-"))].sort((a, b) => b.localeCompare(a)), [sorted]);
   const oems = useMemo(() => [...new Set(sorted.map(s => s.oem).filter(o => o !== "-"))].sort(), [sorted]);
+  const powertrains = useMemo(() => [...new Set(sorted.map(s => s.powertrain).filter(p => p && p !== "-"))].sort(), [sorted]);
 
   const filtered = useMemo(() => {
     return sorted.filter(spec => {
       if (yearFilter !== "all" && spec.year !== yearFilter) return false;
       if (oemFilter !== "all" && spec.oem !== oemFilter) return false;
+      if (powertrainFilter !== "all" && spec.powertrain !== powertrainFilter) return false;
       if (speedFilter !== "all") {
         const speed = getSpeedNumeric(spec);
         if (speedFilter === "low" && speed > 10000) return false;
@@ -140,7 +146,7 @@ export const MotorSpecsTable = ({ data }: Props) => {
       }
       return true;
     });
-  }, [sorted, yearFilter, oemFilter, speedFilter]);
+  }, [sorted, yearFilter, oemFilter, speedFilter, powertrainFilter]);
 
   if (!data?.length) return null;
 
