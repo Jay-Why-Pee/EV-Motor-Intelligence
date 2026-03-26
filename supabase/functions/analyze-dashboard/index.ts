@@ -102,8 +102,8 @@ serve(async (req) => {
           { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요.` }
         ],
         response_format: { type: "json_object" },
-        temperature: 0.7,
-        max_tokens: 10000,
+        temperature: 0.5,
+        max_tokens: 16000,
       }),
     });
 
