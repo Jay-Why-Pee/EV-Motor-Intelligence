@@ -256,7 +256,7 @@ serve(async (req) => {
             messages: [
               {
                 role: 'system',
-                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "powertrain": "BEV|PHEV|MHEV|HEV",\n      "motorPosition": "P1|P2|P3|P4|P2+P4 등",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "rangeKm": "주행가능거리(km 숫자)",\n      "notable": "주목 기술"\n    }\n  ]\n}\n규칙: BEV/HEV/PHEV/MHEV 글로벌 모든 모델을 200개 이상 작성, 공개 검증 불가 값은 '-'로 표기, '정보 없음' 금지, 중복 금지, 연도 내림차순. 듀얼 모터 토크/출력은 슬래시 구분(예: 300/200).`
+                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "powertrain": "BEV|PHEV|MHEV|HEV",\n      "motorPosition": "P0|P1|P2|P3|P4|P2+P4|P3+P4 등",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "rangeKm": "주행가능거리(km 숫자)",\n      "notable": "주목 기술"\n    }\n  ]\n}\n★★★ 필수 규칙 ★★★\n- powertrain: 반드시 BEV/PHEV/MHEV/HEV 중 하나. "-" 절대 금지.\n- motorPosition: BEV 싱글→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0. "-" 최소화.\n- rangeKm: BEV는 반드시 주행거리 기재(300~700km). PHEV는 EV모드 거리. HEV/MHEV만 "-" 허용.\n- 200개 이상 작성, 공개 검증 불가 값만 '-', '정보 없음' 금지, 중복 금지, 연도 내림차순. 듀얼 모터 토크/출력은 슬래시 구분(예: 300/200).`
               },
               {
                 role: 'user',
