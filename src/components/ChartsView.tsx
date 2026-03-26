@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { WordCloudChart } from "./charts/WordCloudChart";
 import { MotorSpecsTable } from "./charts/MotorSpecsTable";
 import { RoadmapTimeline } from "./charts/RoadmapTimeline";
 import { supabase } from "@/integrations/supabase/client";
+import { Button } from "./ui/button";
 
 export const ChartsView = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+
     try {
       const { data: result, error } = await supabase
         .from("market_analysis")
@@ -25,11 +29,24 @@ export const ChartsView = () => {
     } catch (e) {
       console.error("Error fetching dashboard data:", e);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true);
+      const { error } = await supabase.functions.invoke("analyze-dashboard");
+      if (error) throw error;
+      await fetchData(false);
+    } catch (e) {
+      console.error("Error refreshing dashboard:", e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -46,17 +63,29 @@ export const ChartsView = () => {
         <p className="text-muted-foreground">
           뉴스 자동 업데이트 시 대시보드 데이터가 함께 생성됩니다.
         </p>
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={handleRefresh} disabled={refreshing} className="gap-2">
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+            새로고침
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {lastUpdated && (
-        <p className="text-xs text-muted-foreground">
-          마지막 업데이트: {new Date(lastUpdated).toLocaleString("ko-KR")}
-        </p>
-      )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {lastUpdated ? (
+          <p className="text-xs text-muted-foreground">
+            마지막 업데이트: {new Date(lastUpdated).toLocaleString("ko-KR")}
+          </p>
+        ) : <div />}
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-2">
+          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+          새로고침
+        </Button>
+      </div>
 
       <WordCloudChart data={data.wordCloud} />
       <MotorSpecsTable data={data.motorSpecs} />

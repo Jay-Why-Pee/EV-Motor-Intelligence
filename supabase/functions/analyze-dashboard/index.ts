@@ -6,6 +6,65 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface MotorSpecRow {
+  year: string;
+  oem: string;
+  model: string;
+  segment: string;
+  priceUsd: string;
+  motorSupplier: string;
+  torqueNm: string;
+  powerKw: string;
+  maxSpeedRpm: string;
+  notable: string;
+}
+
+const missingTokens = new Set(['', '-', '정보 없음', '없음', '미확인', 'n/a', 'na', 'unknown']);
+
+const normalizeField = (value: unknown): string => {
+  if (value === null || value === undefined) return '-';
+  const text = String(value).trim();
+  if (missingTokens.has(text.toLowerCase())) return '-';
+  return text;
+};
+
+const normalizeMotorSpec = (raw: any): MotorSpecRow => ({
+  year: normalizeField(raw?.year),
+  oem: normalizeField(raw?.oem),
+  model: normalizeField(raw?.model),
+  segment: normalizeField(raw?.segment),
+  priceUsd: normalizeField(raw?.priceUsd),
+  motorSupplier: normalizeField(raw?.motorSupplier),
+  torqueNm: normalizeField(raw?.torqueNm),
+  powerKw: normalizeField(raw?.powerKw),
+  maxSpeedRpm: normalizeField(raw?.maxSpeedRpm),
+  notable: normalizeField(raw?.notable),
+});
+
+const dedupeAndSortMotorSpecs = (specs: any[]): MotorSpecRow[] => {
+  const map = new Map<string, MotorSpecRow>();
+
+  for (const raw of specs) {
+    const spec = normalizeMotorSpec(raw);
+    if (spec.oem === '-' || spec.model === '-') continue;
+    const key = `${spec.oem.toLowerCase()}::${spec.model.toLowerCase()}`;
+    if (!map.has(key)) map.set(key, spec);
+  }
+
+  return [...map.values()].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+};
+
+const parseJsonFromModel = (content: string) => {
+  const cleaned = content.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const match = cleaned.match(/{[\s\S]*}/);
+    if (!match) throw new Error('AI 응답 JSON 파싱 실패');
+    return JSON.parse(match[0]);
+  }
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -58,7 +117,6 @@ serve(async (req) => {
       "torqueNm": "모터 최대 토크(Nm, 숫자만)",
       "powerKw": "모터 최대 출력(kW, 숫자만)",
       "maxSpeedRpm": "모터 최대 회전수(rpm, 숫자만)",
-      "weightKg": "모터 중량(kg, 숫자만)",
       "notable": "주목할 기술 특징"
     }
   ],
@@ -77,12 +135,13 @@ serve(async (req) => {
    - 반드시 제외할 단어: EV, 전기차, 배터리, 모터, 소프트웨어, 인버터, 자동차, 하이브리드, 전동화, Electric Vehicle, Battery, Motor, Software, Inverter 등 비기술적 통칭/일반 개념어.
    - 포함할 단어 예시: Hairpin Winding, SiC MOSFET, 800V Architecture, e-Axle, IPMSM, Flat Wire, NdFeB, Ferrite Magnet, Axial Flux, Distributed Winding, Concentrated Winding, Oil Cooling, Water Jacket, Bar Winding, I-pin, Segment Conductor, Dual Rotor, Halbach Array, Reluctance Torque, Back-EMF, GaN, Continuous Casting, Die-cast Copper Rotor 등 구체적 기술 용어만.
 
-2. motorSpecs: 글로벌 주요 완성차 OEM들의 확인 가능한 모든 BEV/PHEV 차종 정보를 최대한 많이 수집 (40~80개 목표).
+2. motorSpecs: 글로벌 주요 완성차 OEM들의 확인 가능한 모든 BEV/HEV/PHEV 차종 정보를 최대한 많이 수집 (최소 80개, 가능하면 120개 이상).
    - 출시연도(year) 내림차순 정렬.
-   - 반드시 실제로 공개된/검증된 스펙만 입력. 확인 불가 시 "-"로 표기 (절대 추측하지 말 것).
-   - 단위: 가격은 USD 숫자만(예: 42990), 토크는 Nm, 출력은 kW, 회전수는 rpm, 중량은 kg.
+   - 반드시 실제로 공개된/검증된 스펙만 입력. 확인 불가 시 "-"로 표기 (절대 추측하지 말 것, "정보 없음" 문자열 금지).
+   - 단위: 가격은 USD 숫자만(예: 42990), 토크는 Nm, 출력은 kW, 회전수는 rpm.
    - 포함 OEM: Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault 등.
-   - 차량의 공식 스펙시트에서 motor max torque(Nm), motor max power(kW), motor max speed(rpm) 정보를 찾아 입력. 차량 레벨 토크/출력이 아닌 모터 단품 스펙 우선. 모터 단품 스펙을 모르면 차량 레벨 값 입력 후 notable에 "(차량 레벨)" 표기.
+   - 차량의 공식 스펙시트에서 motor max torque(Nm), motor max power(kW), motor max speed(rpm) 정보를 찾아 입력. 차량 레벨 토크/출력이면 notable에 "(차량 레벨)" 표기.
+   - 중복 차종은 제거하고 차종명+트림은 명확히 구분.
 
 3. roadmap:
    - PRM(Product Roadmap): PMSM, Non-PMSM, P1~P4 구동 방식, BEV/xHEV별 제품 발전 방향. 2020~2028 범위. 8~15개 항목.
@@ -99,7 +158,7 @@ serve(async (req) => {
         model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요. motorSpecs는 뉴스에 언급된 차종뿐 아니라, 당신이 알고 있는 글로벌 모든 주요 BEV/PHEV 차종의 모터 스펙을 포함해주세요. 최소 40개 이상 차종을 목표로 하세요.` }
+          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요. motorSpecs는 뉴스에 언급된 차종뿐 아니라 글로벌 주요 완성차의 BEV/HEV/PHEV 전체 라인업을 폭넓게 포함해주세요. 최소 80개 이상, 가능하면 120개 이상 차종을 목표로 하세요.` }
         ],
         response_format: { type: "json_object" },
         temperature: 0.5,
@@ -114,9 +173,49 @@ serve(async (req) => {
     }
 
     const aiData = await res.json();
-    let content = aiData.choices[0].message.content;
-    content = content.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-    const dashboardData = JSON.parse(content);
+    const modelContent = aiData?.choices?.[0]?.message?.content || '{}';
+    const dashboardData = parseJsonFromModel(modelContent);
+    let mergedMotorSpecs = Array.isArray(dashboardData.motorSpecs) ? dashboardData.motorSpecs : [];
+
+    if (mergedMotorSpecs.length < 40) {
+      try {
+        const supplementRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${lovableApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-pro',
+            messages: [
+              {
+                role: 'system',
+                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "notable": "주목 기술(차량 레벨이면 표기)"\n    }\n  ]\n}\n규칙: BEV/HEV/PHEV 글로벌 주요 모델을 120개 이상 작성, 공개 검증 불가 값은 '-'로 표기, '정보 없음' 금지, 중복 금지, 연도 내림차순.`
+              },
+              {
+                role: 'user',
+                content: 'Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault 등 주요 OEM의 전동화 차종을 폭넓게 포함해서 motorSpecs를 생성해줘.'
+              }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.2,
+            max_tokens: 12000,
+          }),
+        });
+
+        if (supplementRes.ok) {
+          const supplementData = await supplementRes.json();
+          const supplementContent = supplementData?.choices?.[0]?.message?.content || '{}';
+          const supplementJson = parseJsonFromModel(supplementContent);
+          const supplementSpecs = Array.isArray(supplementJson.motorSpecs) ? supplementJson.motorSpecs : [];
+          mergedMotorSpecs = [...mergedMotorSpecs, ...supplementSpecs];
+        }
+      } catch (supplementError) {
+        console.error('Supplement motor specs generation failed:', supplementError);
+      }
+    }
+
+    dashboardData.motorSpecs = dedupeAndSortMotorSpecs(mergedMotorSpecs);
 
     const { data: existing } = await supabase.from('market_analysis').select('id').eq('type', 'dashboard_v2').maybeSingle();
     if (existing) {

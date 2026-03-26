@@ -79,7 +79,7 @@ export const NewsPulse = () => {
       {insight && parsedContent ? (
         <Card className="p-5 card-glow">
           <div className="text-xs text-muted-foreground mb-3">
-            분석 시간: {new Date(insight.generated_at).toLocaleString('ko-KR')} | 분석 뉴스: {insight.news_analyzed_count}개
+            분석 시간: {new Date(insight.generated_at).toLocaleString('ko-KR')}
           </div>
           <div className="mb-4 p-3 bg-primary/10 rounded-lg border border-primary/20">
             <p className="text-sm leading-relaxed">{parsedContent.summary}</p>

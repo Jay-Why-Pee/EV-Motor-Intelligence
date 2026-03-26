@@ -16,7 +16,6 @@ interface MotorSpec {
   torqueNm: string;
   powerKw: string;
   maxSpeedRpm: string;
-  weightKg: string;
   notable: string;
   // legacy fields for backward compat
   torqueVehicle?: string;
@@ -25,7 +24,6 @@ interface MotorSpec {
   powerMotor?: string;
   maxSpeedVehicle?: string;
   maxSpeedMotor?: string;
-  weightMotor?: string;
 }
 
 interface Props {
@@ -42,7 +40,6 @@ const columns = [
   { key: "torqueNm", label: "토크 (Nm)" },
   { key: "powerKw", label: "출력 (kW)" },
   { key: "maxSpeedRpm", label: "최대속도 (rpm)" },
-  { key: "weightKg", label: "중량 (kg)" },
   { key: "notable", label: "주목 기술" },
 ];
 
@@ -54,7 +51,6 @@ const getCellValue = (spec: any, key: string): string => {
     if (key === "torqueNm") val = spec.torqueMotor || spec.torqueVehicle;
     if (key === "powerKw") val = spec.powerMotor || spec.powerVehicle;
     if (key === "maxSpeedRpm") val = spec.maxSpeedMotor || spec.maxSpeedVehicle;
-    if (key === "weightKg") val = spec.weightMotor;
   }
   if (!val || val === "정보 없음") return "-";
   return val;
@@ -78,10 +74,6 @@ const formatCell = (key: string, val: string): string => {
     const num = parseInt(val.replace(/[^0-9]/g, ""));
     return isNaN(num) ? val : `${num.toLocaleString()} rpm`;
   }
-  if (key === "weightKg" && !val.includes("kg")) {
-    const num = parseFloat(val.replace(/[^0-9.]/g, ""));
-    return isNaN(num) ? val : `${num} kg`;
-  }
   return val;
 };
 
@@ -91,7 +83,7 @@ const SpecTable = ({ specs }: { specs: MotorSpec[] }) => (
       <TableHeader>
         <TableRow>
           {columns.map(col => (
-            <TableHead key={col.key} className="whitespace-nowrap text-xs font-semibold">
+            <TableHead key={col.key} className="whitespace-nowrap text-sm font-semibold">
               {col.label}
             </TableHead>
           ))}
@@ -103,7 +95,7 @@ const SpecTable = ({ specs }: { specs: MotorSpec[] }) => (
             {columns.map(col => {
               const raw = getCellValue(spec, col.key);
               return (
-                <TableCell key={col.key} className="whitespace-nowrap text-xs">
+                <TableCell key={col.key} className="whitespace-nowrap text-sm">
                   {formatCell(col.key, raw)}
                 </TableCell>
               );
