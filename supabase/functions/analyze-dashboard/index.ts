@@ -258,7 +258,7 @@ status: 2024이전 past, 2024-2025 current, 2026+ future.`;
     // Run both in parallel
     const [overviewData, motorData] = await Promise.all([
       callAi(apiKey, 'google/gemini-2.5-flash', overviewPrompt, `최근 뉴스 ${newsData.length}건:\n${newsBrief}`, 8000, 0.4),
-      callAi(apiKey, 'google/gemini-2.5-flash', motorPrompt, `최근 뉴스 참고:\n${newsBrief.slice(0, 3000)}`, 10000, 0.15),
+      callAi(apiKey, 'google/gemini-2.5-flash', motorPrompt, `최근 뉴스 참고:\n${newsBrief.slice(0, 3000)}`, 16000, 0.15),
     ]);
 
     console.log('AI calls complete');
