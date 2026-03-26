@@ -183,6 +183,15 @@ export const MotorSpecsTable = ({ data }: Props) => {
           <SelectItem value="high">16,001 rpm~</SelectItem>
         </SelectContent>
       </Select>
+      <Select value={powertrainFilter} onValueChange={setPowertrainFilter}>
+        <SelectTrigger className="w-[150px] h-9 text-sm">
+          <SelectValue placeholder="파워트레인" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">전체 타입</SelectItem>
+          {powertrains.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+        </SelectContent>
+      </Select>
     </div>
   );
 
