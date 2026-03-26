@@ -28,12 +28,12 @@ serve(async (req) => {
 
     console.log('Starting news analysis...');
 
-    // Fetch all recent news
+    // Fetch recent news (up to 300)
     const { data: newsData, error: newsError } = await supabase
       .from('news')
       .select('*')
       .order('date', { ascending: false })
-      .limit(50);
+      .limit(300);
 
     if (newsError) {
       console.error('Error fetching news:', newsError);
