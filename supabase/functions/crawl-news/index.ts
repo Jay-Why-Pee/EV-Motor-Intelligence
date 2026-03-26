@@ -288,6 +288,20 @@ Important:
 
     console.log(`Upserted: ${classified.length}`);
 
+    // Auto-trigger analyze-news and analyze-dashboard after crawling
+    const fnUrl = (name: string) => `${SUPABASE_URL}/functions/v1/${name}`;
+    const fnHeaders = { 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' };
+
+    try {
+      console.log('Auto-triggering analyze-news...');
+      await fetch(fnUrl('analyze-news'), { method: 'POST', headers: fnHeaders });
+      console.log('Auto-triggering analyze-dashboard...');
+      await fetch(fnUrl('analyze-dashboard'), { method: 'POST', headers: fnHeaders });
+      console.log('All analyses triggered successfully');
+    } catch (e) {
+      console.error('Error triggering analyses:', e);
+    }
+
     return new Response(
       JSON.stringify({ success: true, upserted: classified.length }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
