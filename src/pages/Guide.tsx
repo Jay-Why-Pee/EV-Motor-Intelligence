@@ -2,7 +2,7 @@ import { Header } from "@/components/Header";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
-import { TrendingUp, BarChart3, Newspaper, Lightbulb, BookOpen, FileText, MessageSquarePlus, History, type LucideIcon } from "lucide-react";
+import { TrendingUp, BarChart3, Newspaper, BookOpen, FileText, MessageSquarePlus, History, type LucideIcon } from "lucide-react";
 
 interface PageInfo {
   icon: LucideIcon;
@@ -23,22 +23,16 @@ const pages: PageInfo[] = [
   {
     icon: BarChart3,
     title: "차트",
-    description: "뉴스·논문·특허 데이터를 기반으로 AI가 생성한 시그널 차트를 제공합니다. 기술 키워드 트렌드, OEM 히트맵, 정책 동향, 연구 주제 분석, 특허 출원량 등을 시각화합니다.",
-    howToUse: "'데이터 분석 시작' 버튼으로 최신 데이터를 분석하거나, 이미 생성된 차트를 뉴스/논문/특허 탭별로 확인하세요.",
-    tips: ["격일 오전 6시(KST)에 자동 업데이트됩니다"],
+    description: "뉴스·논문·특허 데이터를 기반으로 AI가 생성한 기술 키워드 워드 클라우드, 글로벌 BEV/HEV/PHEV 모터 스펙 데이터베이스(출시연도·OEM·필터 지원), PRM/TRM 로드맵 타임라인을 제공합니다.",
+    howToUse: "'데이터 분석 시작' 버튼으로 최신 데이터를 분석하세요. 모터 스펙 DB는 출시년도·OEM·속도별 필터로 원하는 차종을 빠르게 찾을 수 있습니다.",
+    tips: ["격일 오전 6시(KST)에 자동 업데이트됩니다", "모터 스펙 DB는 듀얼 모터 차량의 경우 슬래시(/)로 구분 표기됩니다"],
   },
   {
     icon: Newspaper,
     title: "뉴스",
-    description: "EV 모터 관련 뉴스를 지역별, OEM별, 부품사별 카테고리로 분류하여 제공합니다. 뉴스 카드를 클릭하면 원본 기사로 이동합니다.",
+    description: "EV 모터 관련 뉴스를 지역별, OEM별, 부품사별 카테고리로 분류하여 제공합니다. 페이지 최상단에는 최근 뉴스 300건 기반의 AI 종합 분석(News Pulse)이 표시됩니다.",
     howToUse: "카테고리 버튼으로 필터링 → 'AI 분석' 버튼으로 해당 카테고리의 종합 분석 확인 → 개별 뉴스 카드 클릭으로 원본 기사 열람",
-    tips: ["'뉴스 크롤링' 버튼으로 최신 뉴스를 즉시 수집할 수 있습니다"],
-  },
-  {
-    icon: Lightbulb,
-    title: "인사이트",
-    description: "수집된 뉴스를 AI가 종합 분석하여 생성한 전략적 인사이트를 제공합니다. 시장 동향, 기술 트렌드, 경쟁 구도 등의 핵심 정보가 정리됩니다.",
-    howToUse: "페이지를 열면 최신 인사이트가 자동으로 표시됩니다.",
+    tips: ["'뉴스 크롤링' 버튼으로 최신 뉴스를 즉시 수집할 수 있습니다", "News Pulse는 뉴스 크롤링 시 자동으로 업데이트됩니다"],
   },
   {
     icon: BookOpen,
@@ -73,28 +67,33 @@ const Guide = () => {
       <Header />
       <Navigation activeView="guide" />
 
-      <main className="container mx-auto px-4 py-6 md:py-8 max-w-5xl">
+      <main className="container mx-auto px-4 py-6 md:py-8 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gradient">사용 가이드</h1>
           <p className="text-muted-foreground">EV Motor Lens의 각 페이지 기능과 사용법을 확인하세요</p>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           {pages.map((page, idx) => (
-            <Card key={idx} className="p-6 card-glow">
+            <Card key={idx} className="p-5 card-glow hover:shadow-md transition-shadow">
               <div className="flex items-start gap-4">
-                <div className="p-3 rounded-lg bg-primary/10 shrink-0">
-                  <page.icon className="w-6 h-6 text-primary" />
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 shrink-0">
+                  <span className="text-sm font-bold text-primary">{idx + 1}</span>
                 </div>
-                <div className="flex-1 space-y-3">
-                  <h2 className="text-xl font-semibold">{page.title}</h2>
-                  <p className="text-muted-foreground text-sm leading-relaxed">{page.description}</p>
-                  <div className="bg-muted/30 rounded-lg p-4">
-                    <h3 className="text-sm font-medium mb-1.5">💡 사용 방법</h3>
-                    <p className="text-sm text-muted-foreground">{page.howToUse}</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <page.icon className="w-4 h-4 text-primary shrink-0" />
+                    <h2 className="text-lg font-semibold">{page.title}</h2>
+                  </div>
+                  <p className="text-muted-foreground text-sm leading-relaxed mb-3">{page.description}</p>
+                  <div className="bg-muted/40 rounded-md px-4 py-3">
+                    <p className="text-sm text-foreground/80">
+                      <span className="font-medium text-primary">💡 사용법 </span>
+                      {page.howToUse}
+                    </p>
                   </div>
                   {page.tips && (
-                    <ul className="space-y-1">
+                    <ul className="mt-2.5 space-y-1">
                       {page.tips.map((tip, ti) => (
                         <li key={ti} className="text-xs text-muted-foreground/80 flex items-center gap-2">
                           <span className="w-1 h-1 rounded-full bg-primary shrink-0" />

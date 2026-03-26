@@ -138,10 +138,12 @@ serve(async (req) => {
 2. motorSpecs: 글로벌 주요 완성차 OEM들의 확인 가능한 모든 BEV/HEV/PHEV 차종 정보를 최대한 많이 수집 (최소 80개, 가능하면 120개 이상).
    - 출시연도(year) 내림차순 정렬.
    - 반드시 실제로 공개된/검증된 스펙만 입력. 확인 불가 시 "-"로 표기 (절대 추측하지 말 것, "정보 없음" 문자열 금지).
-   - 단위: 가격은 USD 숫자만(예: 42990), 토크는 Nm, 출력은 kW, 회전수는 rpm.
-   - 포함 OEM: Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault 등.
-   - 차량의 공식 스펙시트에서 motor max torque(Nm), motor max power(kW), motor max speed(rpm) 정보를 찾아 입력. 차량 레벨 토크/출력이면 notable에 "(차량 레벨)" 표기.
-   - 중복 차종은 제거하고 차종명+트림은 명확히 구분.
+    - 단위: 가격은 USD 숫자만(예: 42990), 토크는 Nm 숫자만, 출력은 kW 숫자만, 회전수는 rpm 숫자만. 단위 문자열은 절대 포함하지 말 것.
+    - 듀얼 모터 차량의 경우: 토크/출력을 슬래시로 구분 표기 (예: 전/후 모터 300Nm/200Nm → "300/200", 150kW/200kW → "150/200"). 단일 모터는 숫자만.
+    - 포함 OEM: Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, SAIC, Changan, GAC Aion, Xiaomi 등.
+    - 차량의 공식 스펙시트에서 motor max torque(Nm), motor max power(kW), motor max speed(rpm) 정보를 찾아 입력. 차량 레벨 토크/출력이면 notable에 "(차량 레벨)" 표기.
+    - 중복 차종은 제거하고 차종명+트림은 명확히 구분.
+    - 최소 100개 이상의 차종을 반드시 포함할 것. 누락 없이 가능한 한 모든 BEV/HEV/PHEV 모델을 포함.
 
 3. roadmap:
    - PRM(Product Roadmap): PMSM, Non-PMSM, P1~P4 구동 방식, BEV/xHEV별 제품 발전 방향. 2020~2028 범위. 8~15개 항목.
@@ -162,7 +164,7 @@ serve(async (req) => {
         ],
         response_format: { type: "json_object" },
         temperature: 0.5,
-        max_tokens: 16000,
+        max_tokens: 20000,
       }),
     });
 
