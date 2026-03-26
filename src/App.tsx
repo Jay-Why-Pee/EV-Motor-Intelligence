@@ -7,7 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import PasswordGate from "./pages/PasswordGate";
 import Index from "./pages/Index";
 import News from "./pages/News";
-import Insights from "./pages/Insights";
+
 import TrendBriefing from "./pages/TrendBriefing";
 import Research from "./pages/Research";
 import Patents from "./pages/Patents";
@@ -47,7 +47,7 @@ const App = () => {
             <Route path="/guide" element={<Guide />} />
             <Route path="/charts" element={<Index />} />
             <Route path="/news" element={<News />} />
-            <Route path="/insights" element={<Insights />} />
+            
             <Route path="/research" element={<Research />} />
             <Route path="/patents" element={<Patents />} />
             <Route path="/feedback" element={<Feedback />} />

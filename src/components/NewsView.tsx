@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { NewsCard } from "./NewsCard";
+import { NewsPulse } from "./NewsPulse";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -154,6 +155,9 @@ export const NewsView = () => {
 
   return (
     <div className="space-y-8">
+      {/* News Pulse */}
+      <NewsPulse />
+
       {/* Filters */}
       <div className="space-y-4">
         {groupedCategories.map((group, gi) => (

@@ -24,7 +24,6 @@ serve(async (req) => {
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Fetch news
     const { data: newsData } = await supabase
       .from('news')
       .select('*')
@@ -37,68 +36,56 @@ serve(async (req) => {
       });
     }
 
-    // Fetch existing research/patent analysis for context
-    const { data: researchData } = await supabase.from('market_analysis').select('content').eq('type', 'research').maybeSingle();
-    const { data: patentData } = await supabase.from('market_analysis').select('content').eq('type', 'patents').maybeSingle();
-
     const newsSummary = newsData.map(a =>
       `[${a.category?.join(', ')}] ${a.title_kr}\n${a.summary}\n출처: ${a.source} (${a.date})`
     ).join('\n\n');
 
-    const researchContext = researchData?.content ? JSON.stringify(researchData.content).slice(0, 3000) : '없음';
-    const patentContext = patentData?.content ? JSON.stringify(patentData.content).slice(0, 3000) : '없음';
-
-    const systemPrompt = `당신은 전기차 모터 산업 데이터 분석 전문가입니다. 제공된 뉴스, 논문, 특허 데이터를 기반으로 대시보드용 구조화된 차트 데이터를 생성하세요.
+    const systemPrompt = `당신은 전기차 모터 산업 데이터 분석 전문가입니다. 제공된 뉴스 데이터를 기반으로 3가지 섹션의 대시보드 데이터를 생성하세요.
 
 반드시 아래 JSON 구조로 응답하세요:
 {
-  "kpis": [
-    { "title": "string", "value": "string", "change": "string", "trend": "up|down", "iconType": "trend|paper|patent|risk|company" }
+  "wordCloud": [
+    { "text": "키워드", "value": 숫자(1~100) }
   ],
-  "news": {
-    "keywordTrend": [
-      { "month": "YYYY-MM", "Hairpin": 0, "SiC": 0, "800V": 0, "e-Axle": 0, "무자석모터": 0 }
+  "motorSpecs": [
+    {
+      "oem": "완성차 제조사",
+      "model": "차종명",
+      "segment": "세그먼트(B-SUV, D-Sedan 등)",
+      "priceUsd": "가격(USD)",
+      "motorSupplier": "모터 공급업체",
+      "motorName": "모터 이름/모델명",
+      "torqueVehicle": "차량 토크(Nm)",
+      "torqueMotor": "모터 토크(Nm)",
+      "powerVehicle": "차량 출력(kW or HP)",
+      "powerMotor": "모터 출력(kW)",
+      "maxSpeedVehicle": "차량 최대속도(km/h)",
+      "maxSpeedMotor": "모터 최대 RPM",
+      "weightMotor": "모터 중량(kg)",
+      "notable": "주목할 기술 특징"
+    }
+  ],
+  "roadmap": {
+    "prm": [
+      { "year": "2024", "category": "PMSM|Non-PMSM|P1|P2|P3|P4|BEV|xHEV", "title": "제목", "description": "설명", "status": "past|current|future" }
     ],
-    "oemHeatmap": [
-      { "company": "Tesla", "모터효율": 0, "희토류": 0, "e-Axle": 0, "SiC": 0, "냉각": 0 }
-    ],
-    "policyTrend": [
-      { "policy": "IRA", "mentions": 0, "change": "+0%", "impact": 0 }
-    ]
-  },
-  "research": {
-    "topicTrend": [
-      { "period": "2024 Q1", "IPMSM고속설계": 0, "SRM": 0, "무자석모터": 0, "800V열관리": 0, "권선기술": 0 }
-    ],
-    "countryResearch": [
-      { "country": "중국", "papers": 0, "ratio": 0 }
-    ]
-  },
-  "patents": {
-    "companyTrend": [
-      { "year": "2022", "BYD": 0, "Tesla": 0, "Toyota": 0, "Hyundai": 0, "Bosch": 0, "LG": 0 }
-    ],
-    "risingTech": [
-      { "tech": "기술명", "growth": 0, "count": 0 }
-    ],
-    "influenceTop": [
-      { "rank": 1, "title": "특허명", "company": "기업명", "citations": 0, "tech": "기술분야" }
+    "trm": [
+      { "year": "2024", "category": "Stator|Rotor|Winding|Magnet|Cooling|Inverter|Housing|Bearing", "title": "제목", "description": "설명", "status": "past|current|future" }
     ]
   }
 }
 
 규칙:
-1. KPI 5개: (1)뉴스 기반 기술 상승률 1위 키워드+변화율 (2)최근 EV모터 논문 동향 수치 (3)특허 출원 증가율 (4)희토류/공급망 리스크 언급 수 (5)OEM 뉴스 증가 TOP 기업
-2. keywordTrend: 최근 6개월, 5~7개 EV모터 기술 키워드(Hairpin,SiC,800V,e-Axle,무자석모터,GaN 등)의 월별 뉴스 언급량
-3. oemHeatmap: 6~8개 주요기업(Tesla,Hyundai,BYD,Toyota,Bosch,Continental,LG,Nidec)의 5~6개 기술키워드 언급빈도(0~10)
-4. policyTrend: 4~6개 정책(IRA,EU규제,중국NEV,RAW,일본보조금 등)의 언급량+모터기술 영향도(1~10)
-5. topicTrend: 최근 4분기, 5개 연구주제의 논문 수 추정
-6. countryResearch: 5개국 연구비중
-7. companyTrend: 3년간 6개기업 특허출원 추정
-8. risingTech: 특허 증가율 TOP 10
-9. influenceTop: 영향력 특허 TOP 10
+1. wordCloud: 20~30개의 EV 모터 기술 키워드. 뉴스에서 자주 언급되는 기술(Hairpin, SiC, 800V, e-Axle, IPMSM, Flat Wire, NdFeB, Ferrite, Axial Flux 등)의 상대적 빈도를 value로 표현.
 
-뉴스에서 직접 확인되는 수치는 그대로, 나머지는 업계 트렌드 기반 합리적 추정.`;
+2. motorSpecs: 실제 출시된 EV/HEV 차량에 장착된 모터 정보 15~25개. 최신 차종 우선 정렬.
+   - 반드시 실제로 존재하는 정보만 입력. 없는 정보는 "정보 없음"으로 표기.
+   - Tesla Model 3/Y/S/X, Hyundai Ioniq 5/6, Kia EV6/EV9, BMW iX/i4, Mercedes EQS/EQE, BYD Seal/Han, VW ID.4, Porsche Taycan, Lucid Air, Rivian R1T 등 실제 차종.
+
+3. roadmap:
+   - PRM(Product Roadmap): PMSM, Non-PMSM, P1~P4 구동 방식, BEV/xHEV별 제품 발전 방향. 2020~2028 범위. 8~15개 항목.
+   - TRM(Technical Roadmap): 모터 부품(Stator, Rotor, Winding, Magnet, Cooling, Inverter 등)별 기술 발전. 2020~2028 범위. 8~15개 항목.
+   - status: 2024 이전=past, 2024~2025=current, 2026 이후=future`;
 
     const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -110,17 +97,17 @@ serve(async (req) => {
         model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n=== 논문 분석 ===\n${researchContext}\n\n=== 특허 분석 ===\n${patentContext}\n\n위 데이터를 분석하여 대시보드 차트 데이터를 JSON으로 생성해주세요.` }
+          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요.` }
         ],
         response_format: { type: "json_object" },
         temperature: 0.7,
-        max_tokens: 8000,
+        max_tokens: 10000,
       }),
     });
 
     if (!res.ok) {
       if (res.status === 429) return new Response(JSON.stringify({ error: '요청 한도 초과. 잠시 후 다시 시도해주세요.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      if (res.status === 402) return new Response(JSON.stringify({ error: '크레딧 부족. 워크스페이스 설정에서 크레딧을 충전해주세요.' }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (res.status === 402) return new Response(JSON.stringify({ error: '크레딧 부족.' }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       throw new Error(`AI error: ${res.status}`);
     }
 
@@ -129,7 +116,6 @@ serve(async (req) => {
     content = content.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
     const dashboardData = JSON.parse(content);
 
-    // Store in market_analysis
     const { data: existing } = await supabase.from('market_analysis').select('id').eq('type', 'dashboard_v2').maybeSingle();
     if (existing) {
       await supabase.from('market_analysis').update({
