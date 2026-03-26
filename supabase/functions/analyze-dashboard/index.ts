@@ -6,33 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-interface MotorSpecRow {
-  year: string;
-  oem: string;
-  model: string;
-  powertrain: string;
-  motorPosition: string;
-  segment: string;
-  priceUsd: string;
-  motorSupplier: string;
-  torqueNm: string;
-  powerKw: string;
-  maxSpeedRpm: string;
-  rangeKm: string;
-  notable: string;
-  dataGapReason?: string[];
-}
-
 const missingTokens = new Set(['', '-', '정보 없음', '없음', '미확인', 'n/a', 'na', 'unknown']);
 const allowedPowertrains = new Set(['BEV', 'PHEV', 'MHEV', 'HEV']);
-
-const pickField = (raw: any, keys: string[]): unknown => {
-  for (const key of keys) {
-    const value = raw?.[key];
-    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
-  }
-  return undefined;
-};
 
 const normalizeField = (value: unknown): string => {
   if (value === null || value === undefined) return '-';
@@ -41,289 +16,130 @@ const normalizeField = (value: unknown): string => {
   return text;
 };
 
-const normalizePowertrain = (value: unknown): string => {
-  const text = normalizeField(value);
-  if (text === '-') return '-';
-
-  const upper = text.toUpperCase().replace(/\s+/g, '');
-  if (allowedPowertrains.has(upper)) return upper;
-  if (upper.includes('PHEV') || /plug[-\s]?in/i.test(text)) return 'PHEV';
-  if (upper.includes('MHEV') || /mild\s*hybrid|48v|bsg/i.test(text)) return 'MHEV';
-  if (upper.includes('HEV') || /hybrid|하이브리드/i.test(text)) return 'HEV';
-  if (upper.includes('BEV') || /battery\s*electric|순수\s*전기|전기차/i.test(text)) return 'BEV';
-  return '-';
-};
-
-const inferPowertrainFromRaw = (raw: any): string => {
-  const context = [
-    raw?.powertrain,
-    raw?.fuelType,
-    raw?.model,
-    raw?.segment,
-    raw?.notable,
-  ].filter(Boolean).join(' ').toLowerCase();
-
-  if (/\bphev\b|plug[-\s]?in/.test(context)) return 'PHEV';
-  if (/\bmhev\b|mild\s*hybrid|48v|bsg/.test(context)) return 'MHEV';
-  if (/\bhev\b|full\s*hybrid|self\s*charging\s*hybrid|하이브리드/.test(context)) return 'HEV';
-  if (/\bbev\b|battery\s*electric|순수\s*전기|전기차/.test(context)) return 'BEV';
-  return '-';
-};
-
-const normalizeMotorPosition = (value: unknown, powertrain: string, raw: any): string => {
-  const text = normalizeField(value);
-  if (text !== '-') {
-    const normalized = text.toUpperCase().replace(/\s+/g, '');
-    const match = normalized.match(/^P[0-4](\+P[0-4])*$/);
-    if (match) return match[0];
+const normalizePowertrain = (raw: any): string => {
+  const candidates = [raw?.powertrain, raw?.powerTrain, raw?.fuelType, raw?.vehicleType];
+  for (const v of candidates) {
+    if (!v) continue;
+    const u = String(v).toUpperCase().replace(/\s+/g, '');
+    if (allowedPowertrains.has(u)) return u;
+    if (u.includes('PHEV') || /PLUG[-\s]?IN/i.test(String(v))) return 'PHEV';
+    if (u.includes('MHEV') || /MILD|48V|BSG/i.test(String(v))) return 'MHEV';
+    if (u.includes('HEV') || /HYBRID/i.test(String(v))) return 'HEV';
+    if (u.includes('BEV') || /BATTERY\s*ELECTRIC|전기/i.test(String(v))) return 'BEV';
   }
+  const ctx = JSON.stringify(raw).toLowerCase();
+  if (/\bphev\b|plug.?in/.test(ctx)) return 'PHEV';
+  if (/\bmhev\b|mild.?hybrid|48v/.test(ctx)) return 'MHEV';
+  if (/\bbev\b|battery.?electric/.test(ctx)) return 'BEV';
+  if (/\bhev\b|hybrid/.test(ctx)) return 'HEV';
+  return '-';
+};
 
-  const context = [raw?.model, raw?.notable, raw?.drivetrain].filter(Boolean).join(' ').toLowerCase();
-
-  if (powertrain === 'BEV') {
-    if (/tri[-\s]?motor|triple|3[-\s]?motor/.test(context)) return 'P3+P4+P4';
-    if (/dual[-\s]?motor|awd|all[-\s]?wheel|4wd|사륜|e-four/.test(context)) return 'P3+P4';
+const normalizeMotorPosition = (raw: any, pt: string): string => {
+  const v = normalizeField(raw?.motorPosition || raw?.motor_position || raw?.position);
+  if (v !== '-') {
+    const m = v.toUpperCase().replace(/\s+/g, '').match(/^P[0-4](\+P[0-4])*$/);
+    if (m) return m[0];
+  }
+  const ctx = JSON.stringify(raw).toLowerCase();
+  if (pt === 'BEV') {
+    if (/tri.?motor|triple|3.?motor/.test(ctx)) return 'P3+P4+P4';
+    if (/dual.?motor|awd|all.?wheel|4wd|e-four/.test(ctx)) return 'P3+P4';
     return 'P3';
   }
-  if (powertrain === 'PHEV') {
-    return /awd|all[-\s]?wheel|4wd|dual|e-four|사륜/.test(context) ? 'P2+P4' : 'P2';
+  if (pt === 'PHEV') return /awd|4wd|dual|e-four/.test(ctx) ? 'P2+P4' : 'P2';
+  if (pt === 'MHEV') return 'P0';
+  if (pt === 'HEV') return 'P2';
+  return '-';
+};
+
+const extractRange = (raw: any): string => {
+  for (const k of ['rangeKm', 'range_km', 'range', 'evRange', 'electricRange', 'wltpKm', 'epaKm']) {
+    const v = raw?.[k];
+    if (!v) continue;
+    const nums = String(v).match(/\d{2,4}/g)?.map(Number).filter(n => n >= 20 && n <= 1200);
+    if (nums?.length) return String(Math.max(...nums));
   }
-  if (powertrain === 'MHEV') return 'P0';
-  if (powertrain === 'HEV') return /isg|bsg|belt/.test(context) ? 'P1' : 'P2';
   return '-';
 };
 
-const extractRangeKm = (value: unknown): string => {
-  if (value === null || value === undefined) return '-';
-  const text = String(value);
-  const matches = text.match(/\d{2,4}/g);
-  if (!matches?.length) return '-';
-  const nums = matches.map((n) => parseInt(n, 10)).filter((n) => !isNaN(n) && n >= 20 && n <= 1200);
-  if (!nums.length) return '-';
-  return String(Math.max(...nums));
+const normalizeSpec = (raw: any) => {
+  const pt = normalizePowertrain(raw);
+  return {
+    year: normalizeField(raw?.year || raw?.launchYear),
+    oem: normalizeField(raw?.oem || raw?.brand || raw?.manufacturer),
+    model: normalizeField(raw?.model || raw?.vehicle || raw?.name),
+    powertrain: pt,
+    motorPosition: normalizeMotorPosition(raw, pt),
+    segment: normalizeField(raw?.segment),
+    priceUsd: normalizeField(raw?.priceUsd),
+    motorSupplier: normalizeField(raw?.motorSupplier),
+    torqueNm: normalizeField(raw?.torqueNm),
+    powerKw: normalizeField(raw?.powerKw),
+    maxSpeedRpm: normalizeField(raw?.maxSpeedRpm),
+    rangeKm: extractRange(raw),
+    notable: normalizeField(raw?.notable),
+  };
 };
 
-const normalizeRangeKm = (value: unknown, powertrain: string, raw: any): string => {
-  const direct = extractRangeKm(value);
-  if (direct !== '-') return direct;
-
-  const aliased = extractRangeKm(pickField(raw, ['range', 'range_km', 'wltpKm', 'epaKm', 'evRangeKm', 'electricRangeKm']));
-  if (aliased !== '-') return aliased;
-
-  if (powertrain === 'HEV' || powertrain === 'MHEV') return '-';
-  return '-';
-};
-
-const normalizeMotorSpec = (raw: any): MotorSpecRow => ({
-  ...(() => {
-    const year = normalizeField(pickField(raw, ['year', 'launchYear', 'releaseYear']));
-    const oem = normalizeField(pickField(raw, ['oem', 'brand', 'maker', 'manufacturer']));
-    const model = normalizeField(pickField(raw, ['model', 'vehicle', 'modelName', 'name']));
-    const powertrain = normalizePowertrain(pickField(raw, ['powertrain', 'powerTrain', 'fuelType', 'vehicleType'])) === '-'
-      ? inferPowertrainFromRaw(raw)
-      : normalizePowertrain(pickField(raw, ['powertrain', 'powerTrain', 'fuelType', 'vehicleType']));
-    const motorPosition = normalizeMotorPosition(
-      pickField(raw, ['motorPosition', 'motor_position', 'motorLayout', 'position']),
-      powertrain,
-      raw,
-    );
-    const rangeKm = normalizeRangeKm(
-      pickField(raw, ['rangeKm', 'range_km', 'evRange', 'electricRange']),
-      powertrain,
-      raw,
-    );
-
-    const dataGapReason: string[] = [];
-    if (powertrain === '-') dataGapReason.push('파워트레인 분류의 공식 공개자료를 찾지 못함');
-    if (motorPosition === '-') dataGapReason.push('모터 위치(P단) 공개자료를 찾지 못함');
-    if (rangeKm === '-') {
-      if (powertrain === 'HEV' || powertrain === 'MHEV') {
-        dataGapReason.push('HEV/MHEV는 EV 모드 공식 주행거리(km)를 제공하지 않는 경우가 많음');
-      } else {
-        dataGapReason.push('공식 WLTP/EPA 주행거리 수치가 공개되지 않았거나 시장별 수치가 상이함');
-      }
-    }
-
-    return {
-      year,
-      oem,
-      model,
-      powertrain,
-      motorPosition,
-      segment: normalizeField(raw?.segment),
-      priceUsd: normalizeField(raw?.priceUsd),
-      motorSupplier: normalizeField(raw?.motorSupplier),
-      torqueNm: normalizeField(raw?.torqueNm),
-      powerKw: normalizeField(raw?.powerKw),
-      maxSpeedRpm: normalizeField(raw?.maxSpeedRpm),
-      rangeKm,
-      notable: normalizeField(raw?.notable),
-      dataGapReason: dataGapReason.length ? dataGapReason : undefined,
-    };
-  })(),
-});
-
-const dedupeAndSortMotorSpecs = (specs: any[]): MotorSpecRow[] => {
-  const map = new Map<string, MotorSpecRow>();
-
+const dedupeSpecs = (specs: any[]) => {
+  const map = new Map<string, any>();
   for (const raw of specs) {
-    const spec = normalizeMotorSpec(raw);
-    if (spec.oem === '-' || spec.model === '-') continue;
-    const key = `${spec.oem.toLowerCase()}::${spec.model.toLowerCase()}::${spec.powertrain.toLowerCase()}`;
-    if (!map.has(key)) map.set(key, spec);
+    const s = normalizeSpec(raw);
+    if (s.oem === '-' || s.model === '-') continue;
+    const key = `${s.oem.toLowerCase()}::${s.model.toLowerCase()}::${s.powertrain}`;
+    if (!map.has(key)) map.set(key, s);
   }
-
-  return [...map.values()].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)).slice(0, 300);
+  return [...map.values()].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
 };
 
-const sanitizeJsonText = (content: string): string =>
-  content
-    .replace(/```json\s*/gi, '')
-    .replace(/```/g, '')
-    .replace(/\u0000/g, '')
-    .trim();
+const sanitizeJson = (s: string) => s.replace(/```json\s*/gi, '').replace(/```/g, '').replace(/\u0000/g, '').trim();
 
-const extractBalancedJsonObject = (input: string): string | null => {
-  const start = input.indexOf('{');
-  if (start === -1) return null;
-
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let i = start; i < input.length; i += 1) {
-    const ch = input[i];
-
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-
-    if (ch === '\\') {
-      escaped = true;
-      continue;
-    }
-
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-
-    if (inString) continue;
-
-    if (ch === '{') depth += 1;
-    if (ch === '}') {
-      depth -= 1;
-      if (depth === 0) {
-        return input.slice(start, i + 1);
-      }
+const parseJson = (content: string) => {
+  const cleaned = sanitizeJson(content);
+  const fixTrailing = (s: string) => s.replace(/,\s*([}\]])/g, '$1');
+  
+  // Try full content
+  try { return JSON.parse(fixTrailing(cleaned)); } catch {}
+  
+  // Try balanced extraction
+  let depth = 0, inStr = false, esc = false;
+  const s = cleaned.indexOf('{');
+  if (s >= 0) {
+    for (let i = s; i < cleaned.length; i++) {
+      const c = cleaned[i];
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (c === '{') depth++;
+      if (c === '}') { depth--; if (depth === 0) { try { return JSON.parse(fixTrailing(cleaned.slice(s, i + 1))); } catch { break; } } }
     }
   }
-
-  return null;
+  
+  // Last resort: first { to last }
+  const end = cleaned.lastIndexOf('}');
+  if (s >= 0 && end > s) {
+    try { return JSON.parse(fixTrailing(cleaned.slice(s, end + 1))); } catch {}
+  }
+  
+  throw new Error('JSON parse failed');
 };
 
-const tryParseJson = (jsonText: string) => {
-  const withoutTrailingCommas = jsonText.replace(/,\s*([}\]])/g, '$1');
-  return JSON.parse(withoutTrailingCommas);
-};
-
-const parseJsonFromModel = (content: string) => {
-  const cleaned = sanitizeJsonText(content);
-
-  try {
-    return tryParseJson(cleaned);
-  } catch {
-    const balanced = extractBalancedJsonObject(cleaned);
-    if (balanced) {
-      try {
-        return tryParseJson(balanced);
-      } catch {
-        // fallback below
-      }
-    }
-
-    const firstBrace = cleaned.indexOf('{');
-    const lastBrace = cleaned.lastIndexOf('}');
-    if (firstBrace >= 0 && lastBrace > firstBrace) {
-      return tryParseJson(cleaned.slice(firstBrace, lastBrace + 1));
-    }
-
-    throw new Error('AI 응답 JSON 파싱 실패');
-  }
-};
-
-class AiRequestError extends Error {
-  status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string };
-
-const callAiJson = async ({
-  lovableApiKey,
-  model,
-  messages,
-  maxTokens,
-  temperature,
-  retries = 1,
-}: {
-  lovableApiKey: string;
-  model: string;
-  messages: AiMessage[];
-  maxTokens: number;
-  temperature: number;
-  retries?: number;
-}) => {
-  let lastError: unknown = null;
-
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        response_format: { type: 'json_object' },
-        temperature,
-        max_tokens: maxTokens,
-      }),
-    });
-
-    if (!res.ok) {
-      if (res.status === 429 || res.status === 402) {
-        throw new AiRequestError(res.status, `AI error: ${res.status}`);
-      }
-
-      lastError = new AiRequestError(res.status, `AI error: ${res.status}`);
-      if (attempt >= retries) throw lastError;
-      continue;
-    }
-
-    const aiData = await res.json();
-    const content = aiData?.choices?.[0]?.message?.content;
-    if (!content || typeof content !== 'string') {
-      lastError = new Error('AI 응답이 비어있습니다');
-      if (attempt >= retries) throw lastError;
-      continue;
-    }
-
-    try {
-      return parseJsonFromModel(content);
-    } catch (parseError) {
-      lastError = parseError;
-      if (attempt >= retries) throw parseError;
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error('AI 요청 실패');
+const callAi = async (apiKey: string, model: string, system: string, user: string, maxTokens: number, temp: number) => {
+  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      response_format: { type: 'json_object' }, temperature: temp, max_tokens: maxTokens,
+    }),
+  });
+  if (!res.ok) throw new Error(`AI ${res.status}`);
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content;
+  if (!text) throw new Error('Empty AI response');
+  return parseJson(text);
 };
 
 serve(async (req) => {
@@ -336,154 +152,96 @@ serve(async (req) => {
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
   const token = authHeader?.replace('Bearer ', '') || '';
-  const authorized = token === anonKey || token === serviceKey || apikeyHeader === anonKey || apikeyHeader === serviceKey;
-  if (!authorized) {
+  if (token !== anonKey && token !== serviceKey && apikeyHeader !== anonKey && apikeyHeader !== serviceKey) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
   }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
+    const apiKey = Deno.env.get('LOVABLE_API_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const { data: newsData } = await supabase
-      .from('news')
-      .select('*')
-      .order('date', { ascending: false })
-      .limit(90);
-
+    // Fetch news
+    const { data: newsData } = await supabase.from('news').select('*').order('date', { ascending: false }).limit(60);
     if (!newsData?.length) {
-      return new Response(JSON.stringify({ error: '분석할 뉴스 데이터가 없습니다' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return new Response(JSON.stringify({ error: 'No news data' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const newsSummary = newsData.map(a =>
-      `[${a.category?.join(', ')}] ${a.title_kr}\n${String(a.summary || '').slice(0, 120)}\n출처: ${a.source} (${a.date})`
-    ).join('\n\n');
+    const newsBrief = newsData.map(a => `[${a.category?.join(',')}] ${a.title_kr} (${a.source}, ${a.date})`).join('\n');
 
-    const overviewPrompt = `당신은 EV 모터 기술 리서치 애널리스트다. 아래 JSON으로만 답해라.
+    // Fetch existing motor specs to merge with
+    const { data: existingRow } = await supabase.from('market_analysis').select('content').eq('type', 'dashboard_v2').maybeSingle();
+    const existingSpecs: any[] = (existingRow?.content as any)?.motorSpecs || [];
+
+    // 1) Overview (wordcloud + roadmap) - fast call
+    const overviewPrompt = `EV 모터 기술 애널리스트. JSON만 답해라.
 {
-  "wordCloud": [{ "text": "키워드", "value": 1 }],
+  "wordCloud": [{"text":"키워드","value":1}],
   "roadmap": {
-    "prm": [{ "year": "2024", "category": "카테고리", "title": "제목", "description": "설명", "status": "past|current|future" }],
-    "trm": [{ "year": "2024", "category": "카테고리", "title": "제목", "description": "설명", "status": "past|current|future" }]
+    "prm": [{"year":"2024","category":"카테고리","title":"제목","description":"설명","status":"past|current|future"}],
+    "trm": [{"year":"2024","category":"카테고리","title":"제목","description":"설명","status":"past|current|future"}]
   }
 }
+wordCloud: EV 모터 기술 키워드 20~30개.
+PRM 15개: 모터 아키텍처(IPMSM→EESM→Axial Flux), 800V, 멀티스피드, X-in-1 통합 등.
+TRM 28개: Stator Core(NO Steel→Amorphous), Hairpin Winding(I-pin→Continuous), Rotor Magnet(NdFeB→Dy-free→Ferrite), Cooling(Oil Spray→Direct Slot), SiC MOSFET(Planar→Trench), Resolver→Inductive Encoder, Lamination(0.3mm→0.2mm→0.1mm), Busbar(Cu→Al→Flexible PCB), Housing(Al Cast→CFRP), Insulation(Class H→Class R), Bearing(Steel→Ceramic→Mag), Sealing(Lip→Labyrinth→Mag), Connector(HV Cu→Al), NVH(Skew→Active Noise Cancel), EMC Shielding, Thermal Interface Material, Winding End-Turn 최적화 등.
+status: 2024이전 past, 2024-2025 current, 2026+ future.`;
+
+    // 2) Motor specs - incremental update (top 80 new/updated models only)
+    const motorPrompt = `글로벌 EV/HEV 파워트레인 데이터 리서처. JSON으로 답해라.
+{"motorSpecs":[{"year":"","oem":"","model":"","powertrain":"BEV|PHEV|MHEV|HEV","motorPosition":"P0~P4","segment":"","priceUsd":"","motorSupplier":"","torqueNm":"","powerKw":"","maxSpeedRpm":"","rangeKm":"","notable":""}]}
 
 규칙:
-1) wordCloud는 EV 모터 세부 기술 키워드 20~30개만.
-2) PRM 12~20개: EV 모터 제품/아키텍처 중심.
-3) TRM 24~32개: Stator Core, Winding, Rotor, Magnet, Cooling, Bearing, Inverter, Resolver, Lamination, Busbar, Housing, Insulation, Sealing 등 부품 기술 상세.
-4) status: 2024 이전 past, 2024~2025 current, 2026 이후 future.`;
+- 80~120개 차종. 2023~2026 글로벌 주요 EV/HEV/PHEV 차종.
+- powertrain 필수(BEV/PHEV/MHEV/HEV 중 택1).
+- motorPosition 필수(BEV싱글→P3, 듀얼→P3+P4, PHEV→P2, MHEV→P0, HEV→P2).
+- rangeKm: BEV는 반드시 WLTP/EPA 수치 기입. HEV/MHEV는 EV모드 주행거리 미제공시 "-".
+- 2025 Hyundai/Kia/Genesis 필수 포함: IONIQ 5 N, IONIQ 5(롱레인지), IONIQ 6, EV3, EV5, EV6, EV6 GT, EV9, EV9 GT, Kona Electric, Niro EV, Ray EV, GV60, Electrified GV70, Electrified G80, Tucson HEV, Santa Fe HEV, Sorento HEV/PHEV, Sportage HEV/PHEV, K8 HEV, K5 HEV, Carnival HEV 등
+- Tesla, BMW, Mercedes, VW, Toyota, BYD, Xiaomi, Rivian, Lucid 등 글로벌 OEM도 포함.
+- "정보 없음" 금지. 불가시 "-"만. 듀얼모터 토크/출력은 슬래시(/) 구분.`;
 
-    const motorSpecsPrompt = `당신은 글로벌 EV/HEV 파워트레인 스펙 데이터 리서처다. 아래 JSON으로만 답해라.
-{
-  "motorSpecs": [
-    {
-      "year": "출시연도",
-      "oem": "완성차 제조사",
-      "model": "차종명",
-      "powertrain": "BEV|PHEV|MHEV|HEV",
-      "motorPosition": "P0|P1|P2|P3|P4|복합(P2+P4 등)",
-      "segment": "세그먼트",
-      "priceUsd": "가격 USD 숫자",
-      "motorSupplier": "모터 공급사",
-      "torqueNm": "토크 Nm 숫자",
-      "powerKw": "출력 kW 숫자",
-      "maxSpeedRpm": "최대속도 rpm 숫자",
-      "rangeKm": "공식 주행가능거리 km 숫자",
-      "notable": "주목 기술"
-    }
-  ]
-}
+    console.log('Starting AI calls...');
 
-핵심 규칙:
-- 최대 300개까지 글로벌 차종을 채운다(최소 220개).
-- powertrain은 반드시 BEV/PHEV/MHEV/HEV 중 하나.
-- motorPosition은 가능한 한 반드시 기입한다(BEV 싱글→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0 기본 매핑).
-- rangeKm는 BEV/PHEV는 우선적으로 채운다. 공식 검증 수치가 없을 때만 "-" 허용.
-- "정보 없음" 문자열 금지, 불가 시 "-"만 사용.
-- 2025년 Hyundai/Kia/Genesis EV/HEV/PHEV 라인업을 특히 촘촘히 포함한다(예: IONIQ 5/6, Kona Electric, EV3/EV4/EV5/EV6/EV9, GV60, Electrified GV70/G80, Tucson/Santa Fe/Sorento/Sportage HEV/PHEV 등 관련 트림 포함).
-- 중복 금지, year 내림차순.
-- 듀얼 모터 토크/출력은 슬래시 구분.`;
-
-    const [overviewData, motorBaseData] = await Promise.all([
-      callAiJson({
-        lovableApiKey,
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: overviewPrompt },
-          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}` },
-        ],
-        temperature: 0.4,
-        maxTokens: 9000,
-        retries: 1,
-      }),
-      callAiJson({
-        lovableApiKey,
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: motorSpecsPrompt },
-          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}` },
-        ],
-        temperature: 0.2,
-        maxTokens: 12000,
-        retries: 1,
-      }),
+    // Run both in parallel
+    const [overviewData, motorData] = await Promise.all([
+      callAi(apiKey, 'google/gemini-2.5-flash', overviewPrompt, `최근 뉴스 ${newsData.length}건:\n${newsBrief}`, 8000, 0.4),
+      callAi(apiKey, 'google/gemini-2.5-flash', motorPrompt, `최근 뉴스 참고:\n${newsBrief.slice(0, 3000)}`, 10000, 0.15),
     ]);
 
-    const dashboardData: any = {
+    console.log('AI calls complete');
+
+    // Merge new specs with existing
+    const newSpecs = Array.isArray(motorData?.motorSpecs) ? motorData.motorSpecs : [];
+    const allSpecs = [...newSpecs, ...existingSpecs];
+    const finalSpecs = dedupeSpecs(allSpecs).slice(0, 300);
+
+    const dashboard = {
       wordCloud: Array.isArray(overviewData?.wordCloud) ? overviewData.wordCloud : [],
       roadmap: {
         prm: Array.isArray(overviewData?.roadmap?.prm) ? overviewData.roadmap.prm : [],
         trm: Array.isArray(overviewData?.roadmap?.trm) ? overviewData.roadmap.trm : [],
       },
-      motorSpecs: [],
+      motorSpecs: finalSpecs,
     };
 
-    const mergedMotorSpecs = Array.isArray(motorBaseData?.motorSpecs) ? motorBaseData.motorSpecs : [];
-    dashboardData.motorSpecs = dedupeAndSortMotorSpecs(mergedMotorSpecs);
-    dashboardData.motorSpecsQuality = {
-      total: dashboardData.motorSpecs.length,
-      missingPowertrain: dashboardData.motorSpecs.filter((s: MotorSpecRow) => s.powertrain === '-').length,
-      missingMotorPosition: dashboardData.motorSpecs.filter((s: MotorSpecRow) => s.motorPosition === '-').length,
-      missingRangeKm: dashboardData.motorSpecs.filter((s: MotorSpecRow) => s.rangeKm === '-').length,
-      dashPolicy: '공식 스펙 문서(WLTP/EPA/OEM 발표)로 검증 불가한 경우에만 "-" 허용',
-    };
-
+    // Upsert
     const { data: existing } = await supabase.from('market_analysis').select('id').eq('type', 'dashboard_v2').maybeSingle();
     if (existing) {
       await supabase.from('market_analysis').update({
-        content: dashboardData,
-        news_analyzed_count: newsData.length,
-        generated_at: new Date().toISOString(),
+        content: dashboard, news_analyzed_count: newsData.length, generated_at: new Date().toISOString(),
       }).eq('id', existing.id);
     } else {
       await supabase.from('market_analysis').insert({
-        type: 'dashboard_v2',
-        content: dashboardData,
-        news_analyzed_count: newsData.length,
-        generated_at: new Date().toISOString(),
+        type: 'dashboard_v2', content: dashboard, news_analyzed_count: newsData.length, generated_at: new Date().toISOString(),
       });
     }
 
-    return new Response(JSON.stringify(dashboardData), {
+    console.log(`Done: ${finalSpecs.length} specs, ${dashboard.roadmap.prm.length} PRM, ${dashboard.roadmap.trm.length} TRM`);
+
+    return new Response(JSON.stringify({ success: true, specs: finalSpecs.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    if (error instanceof AiRequestError && error.status === 429) {
-      return new Response(JSON.stringify({ error: '요청 한도 초과. 잠시 후 다시 시도해주세요.' }), {
-        status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    if (error instanceof AiRequestError && error.status === 402) {
-      return new Response(JSON.stringify({ error: '크레딧 부족.' }), {
-        status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
     console.error('Error:', error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
