@@ -326,11 +326,6 @@ const callAiJson = async ({
   throw lastError instanceof Error ? lastError : new Error('AI 요청 실패');
 };
 
-const needsCriticalFieldBackfill = (spec: MotorSpecRow): boolean =>
-  spec.powertrain === '-'
-  || spec.motorPosition === '-'
-  || ((spec.powertrain === 'BEV' || spec.powertrain === 'PHEV') && spec.rangeKm === '-');
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -355,7 +350,7 @@ serve(async (req) => {
       .from('news')
       .select('*')
       .order('date', { ascending: false })
-      .limit(180);
+      .limit(90);
 
     if (!newsData?.length) {
       return new Response(JSON.stringify({ error: '분석할 뉴스 데이터가 없습니다' }), {
@@ -364,7 +359,7 @@ serve(async (req) => {
     }
 
     const newsSummary = newsData.map(a =>
-      `[${a.category?.join(', ')}] ${a.title_kr}\n${String(a.summary || '').slice(0, 180)}\n출처: ${a.source} (${a.date})`
+      `[${a.category?.join(', ')}] ${a.title_kr}\n${String(a.summary || '').slice(0, 120)}\n출처: ${a.source} (${a.date})`
     ).join('\n\n');
 
     const overviewPrompt = `당신은 EV 모터 기술 리서치 애널리스트다. 아래 JSON으로만 답해라.
@@ -427,13 +422,13 @@ serve(async (req) => {
       }),
       callAiJson({
         lovableApiKey,
-        model: 'google/gemini-2.5-pro',
+        model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: motorSpecsPrompt },
           { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}` },
         ],
         temperature: 0.2,
-        maxTokens: 18000,
+        maxTokens: 12000,
         retries: 1,
       }),
     ]);
@@ -447,143 +442,8 @@ serve(async (req) => {
       motorSpecs: [],
     };
 
-    let mergedMotorSpecs = Array.isArray(motorBaseData?.motorSpecs) ? motorBaseData.motorSpecs : [];
-
-    if (mergedMotorSpecs.length < 260) {
-      try {
-        const existingModels = mergedMotorSpecs.map((s: any) => `${s.oem}::${s.model}`).join(', ');
-        const supplementJson = await callAiJson({
-          lovableApiKey,
-          model: 'google/gemini-2.5-pro',
-          messages: [
-            {
-              role: 'system',
-              content: `누락된 글로벌 EV/HEV/PHEV/MHEV 차종을 보강하라. 반드시 {"motorSpecs":[...]} JSON만 응답.
-- powertrain은 BEV/PHEV/MHEV/HEV 중 하나 필수
-- motorPosition 필수(불가 시에만 '-')
-- rangeKm는 BEV/PHEV 우선 기입
-- 중복 금지, 연도 내림차순`,
-            },
-            {
-              role: 'user',
-              content: `이미 포함된 차종: ${existingModels}\n\n누락된 글로벌 차종을 최대한 추가해줘.`,
-            },
-          ],
-          temperature: 0.2,
-          maxTokens: 12000,
-          retries: 1,
-        });
-
-        if (supplementJson) {
-          const supplementSpecs = Array.isArray(supplementJson.motorSpecs) ? supplementJson.motorSpecs : [];
-          mergedMotorSpecs = [...mergedMotorSpecs, ...supplementSpecs];
-        }
-      } catch (supplementError) {
-        console.error('Supplement motor specs generation failed:', supplementError);
-      }
-    }
-
-    const normalizedBeforeCoverage = dedupeAndSortMotorSpecs(mergedMotorSpecs);
-    const hyundaiGroup2025Count = normalizedBeforeCoverage.filter((spec) =>
-      spec.year === '2025' && /(hyundai|kia|genesis)/i.test(spec.oem)
-    ).length;
-
-    if (hyundaiGroup2025Count < 12) {
-      try {
-        const hyundaiBoost = await callAiJson({
-          lovableApiKey,
-          model: 'google/gemini-2.5-pro',
-          messages: [
-            {
-              role: 'system',
-              content: `2025년 Hyundai/Kia/Genesis EV/HEV/PHEV 라인업을 보강하라.
-응답 형식: {"motorSpecs":[...]} JSON만.
-필수: powertrain, motorPosition, rangeKm(BEV/PHEV 우선), year=2025 중심.`,
-            },
-            {
-              role: 'user',
-              content: '2025년 Hyundai/Kia/Genesis 차종을 가능한 많이 추가해줘. EV 및 HEV/PHEV 모두 포함.',
-            },
-          ],
-          temperature: 0.15,
-          maxTokens: 8000,
-          retries: 1,
-        });
-
-        if (Array.isArray(hyundaiBoost?.motorSpecs)) {
-          mergedMotorSpecs = [...mergedMotorSpecs, ...hyundaiBoost.motorSpecs];
-        }
-      } catch (coverageError) {
-        console.error('Hyundai 2025 coverage boost failed:', coverageError);
-      }
-    }
-
-    let normalizedMotorSpecs = dedupeAndSortMotorSpecs(mergedMotorSpecs);
-
-    const missingCriticalRows = normalizedMotorSpecs
-      .map((spec, index) => ({ index, spec }))
-      .filter(({ spec }) => needsCriticalFieldBackfill(spec));
-
-    if (missingCriticalRows.length > 0) {
-      try {
-        const backfillInput = missingCriticalRows.slice(0, 180).map(({ index, spec }) => ({
-          index,
-          year: spec.year,
-          oem: spec.oem,
-          model: spec.model,
-          powertrain: spec.powertrain,
-          motorPosition: spec.motorPosition,
-          rangeKm: spec.rangeKm,
-          notable: spec.notable,
-        }));
-
-        const backfillJson = await callAiJson({
-          lovableApiKey,
-          model: 'google/gemini-2.5-pro',
-          messages: [
-            {
-              role: 'system',
-              content: `아래 누락 행의 핵심 필드만 보강하라. JSON 형식:
-{
-  "fills": [
-    { "index": 0, "powertrain": "BEV|PHEV|MHEV|HEV|-", "motorPosition": "P0|P1|P2|P3|P4|복합|-", "rangeKm": "숫자|-", "reason": "짧은 근거" }
-  ]
-}
-규칙:
-- 확신 없으면 '-' 유지
-- BEV/PHEV는 가능한 공식 공개 수치 범위로 rangeKm 보강
-- HEV/MHEV는 rangeKm '-' 허용
-- 절대 "정보 없음" 사용 금지`,
-            },
-            {
-              role: 'user',
-              content: JSON.stringify(backfillInput),
-            },
-          ],
-          temperature: 0.1,
-          maxTokens: 10000,
-          retries: 1,
-        });
-
-        const fills = Array.isArray(backfillJson?.fills) ? backfillJson.fills : [];
-        for (const fill of fills) {
-          const idx = typeof fill?.index === 'number' ? fill.index : -1;
-          if (idx < 0 || idx >= normalizedMotorSpecs.length) continue;
-
-          normalizedMotorSpecs[idx] = normalizeMotorSpec({
-            ...normalizedMotorSpecs[idx],
-            powertrain: fill?.powertrain ?? normalizedMotorSpecs[idx].powertrain,
-            motorPosition: fill?.motorPosition ?? normalizedMotorSpecs[idx].motorPosition,
-            rangeKm: fill?.rangeKm ?? normalizedMotorSpecs[idx].rangeKm,
-            notable: normalizedMotorSpecs[idx].notable,
-          });
-        }
-      } catch (backfillError) {
-        console.error('Critical field backfill failed:', backfillError);
-      }
-    }
-
-    dashboardData.motorSpecs = dedupeAndSortMotorSpecs(normalizedMotorSpecs);
+    const mergedMotorSpecs = Array.isArray(motorBaseData?.motorSpecs) ? motorBaseData.motorSpecs : [];
+    dashboardData.motorSpecs = dedupeAndSortMotorSpecs(mergedMotorSpecs);
     dashboardData.motorSpecsQuality = {
       total: dashboardData.motorSpecs.length,
       missingPowertrain: dashboardData.motorSpecs.filter((s: MotorSpecRow) => s.powertrain === '-').length,
