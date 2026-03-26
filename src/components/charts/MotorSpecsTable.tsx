@@ -11,12 +11,15 @@ interface MotorSpec {
   year: string;
   oem: string;
   model: string;
+  powertrain: string;
+  motorPosition: string;
   segment: string;
   priceUsd: string;
   motorSupplier: string;
   torqueNm: string;
   powerKw: string;
   maxSpeedRpm: string;
+  rangeKm: string;
   notable: string;
   torqueVehicle?: string;
   torqueMotor?: string;
@@ -34,12 +37,15 @@ const columns = [
   { key: "year", label: "출시년도" },
   { key: "oem", label: "OEM" },
   { key: "model", label: "차종" },
+  { key: "powertrain", label: "파워트레인" },
+  { key: "motorPosition", label: "모터 위치" },
   { key: "segment", label: "Segment" },
   { key: "priceUsd", label: "가격 (USD)" },
   { key: "motorSupplier", label: "모터 공급사" },
   { key: "torqueNm", label: "토크 (Nm)" },
   { key: "powerKw", label: "출력 (kW)" },
   { key: "maxSpeedRpm", label: "최대속도 (rpm)" },
+  { key: "rangeKm", label: "주행거리 (km)" },
   { key: "notable", label: "주목 기술" },
 ];
 
