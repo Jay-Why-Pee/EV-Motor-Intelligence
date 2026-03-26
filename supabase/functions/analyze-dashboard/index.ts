@@ -223,7 +223,7 @@ serve(async (req) => {
         model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요. motorSpecs는 뉴스에 언급된 차종뿐 아니라 글로벌 모든 완성차의 BEV/HEV/PHEV/MHEV 전체 라인업을 포함해주세요. 최소 150개 이상 차종을 목표로 하세요. 각 차종에 powertrain(BEV/PHEV/MHEV/HEV), motorPosition(P1~P4 조합), rangeKm(주행가능거리) 정보를 반드시 포함하세요.` }
+          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요.\n\nmotorSpecs 필수 지침:\n1. 글로벌 모든 완성차의 BEV/HEV/PHEV/MHEV 전체 라인업 포함 (최소 150개)\n2. ★ powertrain 필드: 모든 차종에 반드시 BEV/PHEV/MHEV/HEV 중 하나 기재. "-"는 절대 불가.\n3. ★ motorPosition 필드: BEV 싱글모터→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0 등 반드시 기재.\n4. ★ rangeKm 필드: BEV는 반드시 주행거리(km) 기재. PHEV는 EV모드 거리.\n5. 위 3개 필드가 비어있으면 안 됩니다. 최대한 채워주세요.\n\nroadmap 필수 지침:\n1. PRM은 EV 모터 제품 아키텍처 관점에서 12~20개 항목\n2. TRM은 모터 구성 부품별(Stator Core, Winding, Rotor, Magnet, Cooling, Bearing, Inverter, Resolver, Lamination, Busbar, Housing, Insulation, Sealing 등) 기술 진화를 20~30개 항목으로 상세히 작성` }
         ],
         response_format: { type: "json_object" },
         temperature: 0.5,
