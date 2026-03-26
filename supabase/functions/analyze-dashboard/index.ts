@@ -96,10 +96,10 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요.` }
+          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요. motorSpecs는 뉴스에 언급된 차종뿐 아니라, 당신이 알고 있는 글로벌 모든 주요 BEV/PHEV 차종의 모터 스펙을 포함해주세요. 최소 40개 이상 차종을 목표로 하세요.` }
         ],
         response_format: { type: "json_object" },
         temperature: 0.5,
