@@ -138,28 +138,6 @@ export const MotorSpecsTable = ({ data }: Props) => {
 
   if (!data?.length) return null;
 
-  const sorted = useMemo(() =>
-    [...data].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)),
-    [data]
-  );
-
-  const years = useMemo(() => [...new Set(sorted.map(s => s.year).filter(y => y !== "-"))].sort((a, b) => b.localeCompare(a)), [sorted]);
-  const oems = useMemo(() => [...new Set(sorted.map(s => s.oem).filter(o => o !== "-"))].sort(), [sorted]);
-
-  const filtered = useMemo(() => {
-    return sorted.filter(spec => {
-      if (yearFilter !== "all" && spec.year !== yearFilter) return false;
-      if (oemFilter !== "all" && spec.oem !== oemFilter) return false;
-      if (speedFilter !== "all") {
-        const speed = getSpeedNumeric(spec);
-        if (speedFilter === "low" && speed > 10000) return false;
-        if (speedFilter === "mid" && (speed <= 10000 || speed > 16000)) return false;
-        if (speedFilter === "high" && speed <= 16000) return false;
-      }
-      return true;
-    });
-  }, [sorted, yearFilter, oemFilter, speedFilter]);
-
   const preview = filtered.slice(0, 5);
 
   const Filters = () => (
