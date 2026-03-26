@@ -126,20 +126,44 @@ const parseJson = (content: string) => {
   throw new Error('JSON parse failed');
 };
 
-const callAi = async (apiKey: string, model: string, system: string, user: string, maxTokens: number, temp: number) => {
-  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-      response_format: { type: 'json_object' }, temperature: temp, max_tokens: maxTokens,
-    }),
-  });
-  if (!res.ok) throw new Error(`AI ${res.status}`);
-  const data = await res.json();
-  const text = data?.choices?.[0]?.message?.content;
-  if (!text) throw new Error('Empty AI response');
-  return parseJson(text);
+const callAi = async (apiKey: string, model: string, system: string, user: string, maxTokens: number, temp: number, retries = 2): Promise<any> => {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+          response_format: { type: 'json_object' }, temperature: temp, max_tokens: maxTokens,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        console.error(`AI HTTP ${res.status} (attempt ${attempt}): ${body.slice(0, 500)}`);
+        if (attempt < retries) continue;
+        throw new Error(`AI ${res.status}`);
+      }
+      const data = await res.json();
+      const text = data?.choices?.[0]?.message?.content;
+      const finishReason = data?.choices?.[0]?.finish_reason;
+      if (!text) {
+        console.error(`Empty AI response (attempt ${attempt}), finish_reason: ${finishReason}`);
+        if (attempt < retries) continue;
+        throw new Error('Empty AI response');
+      }
+      if (finishReason === 'length') {
+        console.warn(`AI response truncated (attempt ${attempt}), trying with fewer tokens...`);
+      }
+      console.log(`AI response (attempt ${attempt}): ${text.length} chars, finish: ${finishReason}`);
+      return parseJson(text);
+    } catch (e) {
+      if (attempt < retries && (e as Error).message?.includes('parse')) {
+        console.warn(`JSON parse failed (attempt ${attempt}), retrying...`);
+        continue;
+      }
+      throw e;
+    }
+  }
 };
 
 serve(async (req) => {
