@@ -57,7 +57,7 @@ const dedupeAndSortMotorSpecs = (specs: any[]): MotorSpecRow[] => {
     if (!map.has(key)) map.set(key, spec);
   }
 
-  return [...map.values()].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+  return [...map.values()].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)).slice(0, 300);
 };
 
 const parseJsonFromModel = (content: string) => {
