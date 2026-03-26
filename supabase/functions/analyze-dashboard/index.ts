@@ -211,7 +211,7 @@ serve(async (req) => {
       .from('news')
       .select('*')
       .order('date', { ascending: false })
-      .limit(100);
+      .limit(60);
 
     if (!newsData?.length) {
       return new Response(JSON.stringify({ error: '분석할 뉴스 데이터가 없습니다' }), {
@@ -220,7 +220,7 @@ serve(async (req) => {
     }
 
     const newsSummary = newsData.map(a =>
-      `[${a.category?.join(', ')}] ${a.title_kr}\n${a.summary}\n출처: ${a.source} (${a.date})`
+      `[${a.category?.join(', ')}] ${a.title_kr}\n${String(a.summary || '').slice(0, 180)}\n출처: ${a.source} (${a.date})`
     ).join('\n\n');
 
     const systemPrompt = `당신은 전기차 모터 산업 데이터 분석 전문가입니다. 제공된 뉴스 데이터를 기반으로 3가지 섹션의 대시보드 데이터를 생성하세요.
@@ -338,14 +338,14 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
+        model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요.\n\nmotorSpecs 필수 지침:\n1. 글로벌 모든 완성차의 BEV/HEV/PHEV/MHEV 전체 라인업 포함 (최소 150개)\n2. ★ powertrain 필드: 모든 차종에 반드시 BEV/PHEV/MHEV/HEV 중 하나 기재. "-"는 절대 불가.\n3. ★ motorPosition 필드: BEV 싱글모터→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0 등 반드시 기재.\n4. ★ rangeKm 필드: BEV는 반드시 주행거리(km) 기재. PHEV는 EV모드 거리.\n5. 위 3개 필드가 비어있으면 안 됩니다. 최대한 채워주세요.\n\nroadmap 필수 지침:\n1. PRM은 EV 모터 제품 아키텍처 관점에서 12~20개 항목\n2. TRM은 모터 구성 부품별(Stator Core, Winding, Rotor, Magnet, Cooling, Bearing, Inverter, Resolver, Lamination, Busbar, Housing, Insulation, Sealing 등) 기술 진화를 20~30개 항목으로 상세히 작성` }
         ],
         response_format: { type: "json_object" },
         temperature: 0.5,
-        max_tokens: 30000,
+        max_tokens: 12000,
       }),
     });
 
@@ -370,7 +370,7 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-pro',
+            model: 'google/gemini-2.5-flash',
             messages: [
               {
                 role: 'system',
@@ -383,7 +383,7 @@ serve(async (req) => {
             ],
             response_format: { type: 'json_object' },
             temperature: 0.2,
-            max_tokens: 30000,
+            max_tokens: 12000,
           }),
         });
 
