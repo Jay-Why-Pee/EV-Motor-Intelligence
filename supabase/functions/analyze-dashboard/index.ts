@@ -10,12 +10,15 @@ interface MotorSpecRow {
   year: string;
   oem: string;
   model: string;
+  powertrain: string;
+  motorPosition: string;
   segment: string;
   priceUsd: string;
   motorSupplier: string;
   torqueNm: string;
   powerKw: string;
   maxSpeedRpm: string;
+  rangeKm: string;
   notable: string;
 }
 
@@ -32,12 +35,15 @@ const normalizeMotorSpec = (raw: any): MotorSpecRow => ({
   year: normalizeField(raw?.year),
   oem: normalizeField(raw?.oem),
   model: normalizeField(raw?.model),
+  powertrain: normalizeField(raw?.powertrain),
+  motorPosition: normalizeField(raw?.motorPosition),
   segment: normalizeField(raw?.segment),
   priceUsd: normalizeField(raw?.priceUsd),
   motorSupplier: normalizeField(raw?.motorSupplier),
   torqueNm: normalizeField(raw?.torqueNm),
   powerKw: normalizeField(raw?.powerKw),
   maxSpeedRpm: normalizeField(raw?.maxSpeedRpm),
+  rangeKm: normalizeField(raw?.rangeKm),
   notable: normalizeField(raw?.notable),
 });
 
