@@ -5,8 +5,10 @@ import { MotorSpecsTable } from "./charts/MotorSpecsTable";
 import { RoadmapTimeline } from "./charts/RoadmapTimeline";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "./ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 export const ChartsView = () => {
+  const { toast } = useToast();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -41,8 +43,17 @@ export const ChartsView = () => {
       const { error } = await supabase.functions.invoke("analyze-dashboard");
       if (error) throw error;
       await fetchData(false);
+      toast({
+        title: "업데이트 완료",
+        description: "최신 뉴스 기준으로 차트 데이터를 다시 생성했습니다.",
+      });
     } catch (e) {
       console.error("Error refreshing dashboard:", e);
+      toast({
+        title: "업데이트 실패",
+        description: "함수 호출 또는 네트워크 문제로 갱신하지 못했습니다. 잠시 후 다시 시도해주세요.",
+        variant: "destructive",
+      });
     } finally {
       setRefreshing(false);
     }

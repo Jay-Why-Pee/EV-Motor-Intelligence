@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 interface MotorSpecRow {
@@ -20,9 +20,19 @@ interface MotorSpecRow {
   maxSpeedRpm: string;
   rangeKm: string;
   notable: string;
+  dataGapReason?: string[];
 }
 
 const missingTokens = new Set(['', '-', '정보 없음', '없음', '미확인', 'n/a', 'na', 'unknown']);
+const allowedPowertrains = new Set(['BEV', 'PHEV', 'MHEV', 'HEV']);
+
+const pickField = (raw: any, keys: string[]): unknown => {
+  for (const key of keys) {
+    const value = raw?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+  }
+  return undefined;
+};
 
 const normalizeField = (value: unknown): string => {
   if (value === null || value === undefined) return '-';
@@ -31,20 +41,126 @@ const normalizeField = (value: unknown): string => {
   return text;
 };
 
+const normalizePowertrain = (value: unknown): string => {
+  const text = normalizeField(value);
+  if (text === '-') return '-';
+
+  const upper = text.toUpperCase().replace(/\s+/g, '');
+  if (allowedPowertrains.has(upper)) return upper;
+  if (upper.includes('PHEV') || /plug[-\s]?in/i.test(text)) return 'PHEV';
+  if (upper.includes('MHEV') || /mild\s*hybrid|48v|bsg/i.test(text)) return 'MHEV';
+  if (upper.includes('HEV') || /hybrid|하이브리드/i.test(text)) return 'HEV';
+  if (upper.includes('BEV') || /battery\s*electric|순수\s*전기|전기차/i.test(text)) return 'BEV';
+  return '-';
+};
+
+const inferPowertrainFromRaw = (raw: any): string => {
+  const context = [
+    raw?.powertrain,
+    raw?.fuelType,
+    raw?.model,
+    raw?.segment,
+    raw?.notable,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (/\bphev\b|plug[-\s]?in/.test(context)) return 'PHEV';
+  if (/\bmhev\b|mild\s*hybrid|48v|bsg/.test(context)) return 'MHEV';
+  if (/\bhev\b|full\s*hybrid|self\s*charging\s*hybrid|하이브리드/.test(context)) return 'HEV';
+  if (/\bbev\b|battery\s*electric|순수\s*전기|전기차/.test(context)) return 'BEV';
+  return '-';
+};
+
+const normalizeMotorPosition = (value: unknown, powertrain: string, raw: any): string => {
+  const text = normalizeField(value);
+  if (text !== '-') {
+    const normalized = text.toUpperCase().replace(/\s+/g, '');
+    const match = normalized.match(/^P[0-4](\+P[0-4])*$/);
+    if (match) return match[0];
+  }
+
+  const context = [raw?.model, raw?.notable, raw?.drivetrain].filter(Boolean).join(' ').toLowerCase();
+
+  if (powertrain === 'BEV') {
+    if (/tri[-\s]?motor|triple|3[-\s]?motor/.test(context)) return 'P3+P4+P4';
+    if (/dual[-\s]?motor|awd|all[-\s]?wheel|4wd|사륜|e-four/.test(context)) return 'P3+P4';
+    return 'P3';
+  }
+  if (powertrain === 'PHEV') {
+    return /awd|all[-\s]?wheel|4wd|dual|e-four|사륜/.test(context) ? 'P2+P4' : 'P2';
+  }
+  if (powertrain === 'MHEV') return 'P0';
+  if (powertrain === 'HEV') return /isg|bsg|belt/.test(context) ? 'P1' : 'P2';
+  return '-';
+};
+
+const extractRangeKm = (value: unknown): string => {
+  if (value === null || value === undefined) return '-';
+  const text = String(value);
+  const matches = text.match(/\d{2,4}/g);
+  if (!matches?.length) return '-';
+  const nums = matches.map((n) => parseInt(n, 10)).filter((n) => !isNaN(n) && n >= 20 && n <= 1200);
+  if (!nums.length) return '-';
+  return String(Math.max(...nums));
+};
+
+const normalizeRangeKm = (value: unknown, powertrain: string, raw: any): string => {
+  const direct = extractRangeKm(value);
+  if (direct !== '-') return direct;
+
+  const aliased = extractRangeKm(pickField(raw, ['range', 'range_km', 'wltpKm', 'epaKm', 'evRangeKm', 'electricRangeKm']));
+  if (aliased !== '-') return aliased;
+
+  if (powertrain === 'HEV' || powertrain === 'MHEV') return '-';
+  return '-';
+};
+
 const normalizeMotorSpec = (raw: any): MotorSpecRow => ({
-  year: normalizeField(raw?.year),
-  oem: normalizeField(raw?.oem),
-  model: normalizeField(raw?.model),
-  powertrain: normalizeField(raw?.powertrain),
-  motorPosition: normalizeField(raw?.motorPosition),
-  segment: normalizeField(raw?.segment),
-  priceUsd: normalizeField(raw?.priceUsd),
-  motorSupplier: normalizeField(raw?.motorSupplier),
-  torqueNm: normalizeField(raw?.torqueNm),
-  powerKw: normalizeField(raw?.powerKw),
-  maxSpeedRpm: normalizeField(raw?.maxSpeedRpm),
-  rangeKm: normalizeField(raw?.rangeKm),
-  notable: normalizeField(raw?.notable),
+  ...(() => {
+    const year = normalizeField(pickField(raw, ['year', 'launchYear', 'releaseYear']));
+    const oem = normalizeField(pickField(raw, ['oem', 'brand', 'maker', 'manufacturer']));
+    const model = normalizeField(pickField(raw, ['model', 'vehicle', 'modelName', 'name']));
+    const powertrain = normalizePowertrain(pickField(raw, ['powertrain', 'powerTrain', 'fuelType', 'vehicleType'])) === '-'
+      ? inferPowertrainFromRaw(raw)
+      : normalizePowertrain(pickField(raw, ['powertrain', 'powerTrain', 'fuelType', 'vehicleType']));
+    const motorPosition = normalizeMotorPosition(
+      pickField(raw, ['motorPosition', 'motor_position', 'motorLayout', 'position']),
+      powertrain,
+      raw,
+    );
+    const rangeKm = normalizeRangeKm(
+      pickField(raw, ['rangeKm', 'range_km', 'evRange', 'electricRange']),
+      powertrain,
+      raw,
+    );
+
+    const dataGapReason: string[] = [];
+    if (powertrain === '-') dataGapReason.push('파워트레인 분류의 공식 공개자료를 찾지 못함');
+    if (motorPosition === '-') dataGapReason.push('모터 위치(P단) 공개자료를 찾지 못함');
+    if (rangeKm === '-') {
+      if (powertrain === 'HEV' || powertrain === 'MHEV') {
+        dataGapReason.push('HEV/MHEV는 EV 모드 공식 주행거리(km)를 제공하지 않는 경우가 많음');
+      } else {
+        dataGapReason.push('공식 WLTP/EPA 주행거리 수치가 공개되지 않았거나 시장별 수치가 상이함');
+      }
+    }
+
+    return {
+      year,
+      oem,
+      model,
+      powertrain,
+      motorPosition,
+      segment: normalizeField(raw?.segment),
+      priceUsd: normalizeField(raw?.priceUsd),
+      motorSupplier: normalizeField(raw?.motorSupplier),
+      torqueNm: normalizeField(raw?.torqueNm),
+      powerKw: normalizeField(raw?.powerKw),
+      maxSpeedRpm: normalizeField(raw?.maxSpeedRpm),
+      rangeKm,
+      notable: normalizeField(raw?.notable),
+      dataGapReason: dataGapReason.length ? dataGapReason : undefined,
+    };
+  })(),
 });
 
 const dedupeAndSortMotorSpecs = (specs: any[]): MotorSpecRow[] => {
@@ -53,7 +169,7 @@ const dedupeAndSortMotorSpecs = (specs: any[]): MotorSpecRow[] => {
   for (const raw of specs) {
     const spec = normalizeMotorSpec(raw);
     if (spec.oem === '-' || spec.model === '-') continue;
-    const key = `${spec.oem.toLowerCase()}::${spec.model.toLowerCase()}`;
+    const key = `${spec.oem.toLowerCase()}::${spec.model.toLowerCase()}::${spec.powertrain.toLowerCase()}`;
     if (!map.has(key)) map.set(key, spec);
   }
 
@@ -73,14 +189,16 @@ const parseJsonFromModel = (content: string) => {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   const authHeader = req.headers.get('Authorization');
+  const apikeyHeader = req.headers.get('apikey') || '';
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
   const token = authHeader?.replace('Bearer ', '') || '';
-  if (!authHeader || (token !== anonKey && token !== serviceKey)) {
+  const authorized = token === anonKey || token === serviceKey || apikeyHeader === anonKey || apikeyHeader === serviceKey;
+  if (!authorized) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
   }
 
@@ -93,7 +211,7 @@ serve(async (req) => {
       .from('news')
       .select('*')
       .order('date', { ascending: false })
-      .limit(100);
+      .limit(60);
 
     if (!newsData?.length) {
       return new Response(JSON.stringify({ error: '분석할 뉴스 데이터가 없습니다' }), {
@@ -102,7 +220,7 @@ serve(async (req) => {
     }
 
     const newsSummary = newsData.map(a =>
-      `[${a.category?.join(', ')}] ${a.title_kr}\n${a.summary}\n출처: ${a.source} (${a.date})`
+      `[${a.category?.join(', ')}] ${a.title_kr}\n${String(a.summary || '').slice(0, 180)}\n출처: ${a.source} (${a.date})`
     ).join('\n\n');
 
     const systemPrompt = `당신은 전기차 모터 산업 데이터 분석 전문가입니다. 제공된 뉴스 데이터를 기반으로 3가지 섹션의 대시보드 데이터를 생성하세요.
@@ -220,14 +338,14 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
+        model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요.\n\nmotorSpecs 필수 지침:\n1. 글로벌 모든 완성차의 BEV/HEV/PHEV/MHEV 전체 라인업 포함 (최소 150개)\n2. ★ powertrain 필드: 모든 차종에 반드시 BEV/PHEV/MHEV/HEV 중 하나 기재. "-"는 절대 불가.\n3. ★ motorPosition 필드: BEV 싱글모터→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0 등 반드시 기재.\n4. ★ rangeKm 필드: BEV는 반드시 주행거리(km) 기재. PHEV는 EV모드 거리.\n5. 위 3개 필드가 비어있으면 안 됩니다. 최대한 채워주세요.\n\nroadmap 필수 지침:\n1. PRM은 EV 모터 제품 아키텍처 관점에서 12~20개 항목\n2. TRM은 모터 구성 부품별(Stator Core, Winding, Rotor, Magnet, Cooling, Bearing, Inverter, Resolver, Lamination, Busbar, Housing, Insulation, Sealing 등) 기술 진화를 20~30개 항목으로 상세히 작성` }
         ],
         response_format: { type: "json_object" },
         temperature: 0.5,
-        max_tokens: 30000,
+        max_tokens: 12000,
       }),
     });
 
@@ -242,7 +360,7 @@ serve(async (req) => {
     const dashboardData = parseJsonFromModel(modelContent);
     let mergedMotorSpecs = Array.isArray(dashboardData.motorSpecs) ? dashboardData.motorSpecs : [];
 
-    if (mergedMotorSpecs.length < 150) {
+    if (mergedMotorSpecs.length < 260) {
       try {
         const existingModels = mergedMotorSpecs.map((s: any) => `${s.oem}::${s.model}`).join(', ');
         const supplementRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -252,20 +370,20 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-pro',
+            model: 'google/gemini-2.5-flash',
             messages: [
               {
                 role: 'system',
-                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "powertrain": "BEV|PHEV|MHEV|HEV",\n      "motorPosition": "P0|P1|P2|P3|P4|P2+P4|P3+P4 등",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "rangeKm": "주행가능거리(km 숫자)",\n      "notable": "주목 기술"\n    }\n  ]\n}\n★★★ 필수 규칙 ★★★\n- powertrain: 반드시 BEV/PHEV/MHEV/HEV 중 하나. "-" 절대 금지.\n- motorPosition: BEV 싱글→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0. "-" 최소화.\n- rangeKm: BEV는 반드시 주행거리 기재(300~700km). PHEV는 EV모드 거리. HEV/MHEV만 "-" 허용.\n- 200개 이상 작성, 공개 검증 불가 값만 '-', '정보 없음' 금지, 중복 금지, 연도 내림차순. 듀얼 모터 토크/출력은 슬래시 구분(예: 300/200).`
+                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "powertrain": "BEV|PHEV|MHEV|HEV",\n      "motorPosition": "P0|P1|P2|P3|P4|P2+P4|P3+P4 등",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "rangeKm": "주행가능거리(km 숫자)",\n      "notable": "주목 기술"\n    }\n  ]\n}\n★★★ 필수 규칙 ★★★\n- powertrain: 반드시 BEV/PHEV/MHEV/HEV 중 하나. "-" 절대 금지.\n- motorPosition: BEV 싱글→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0. "-" 최소화.\n- rangeKm: BEV는 반드시 주행거리 기재(300~700km). PHEV는 EV모드 거리. HEV/MHEV만 "-" 허용.\n- 300개 이상 작성 목표, 공개 검증 불가 값만 '-', '정보 없음' 금지, 중복 금지, 연도 내림차순. 듀얼 모터 토크/출력은 슬래시 구분(예: 300/200).`
               },
               {
                 role: 'user',
-                content: `이미 포함된 차종: ${existingModels}\n\n위 차종을 제외하고 누락된 글로벌 BEV/PHEV/MHEV/HEV 차종을 200개 이상 추가로 생성해줘. Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, Chery, Great Wall, MG, Vinfast, Tata, Lotus, Lexus, Genesis, Mini, Cupra, Mazda, Subaru 등 모든 OEM 포함.`
+                 content: `이미 포함된 차종: ${existingModels}\n\n위 차종을 제외하고 누락된 글로벌 BEV/PHEV/MHEV/HEV 차종을 300개 목표로 최대한 추가해줘. Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, Chery, Great Wall, MG, Vinfast, Tata, Lotus, Lexus, Genesis, Mini, Cupra, Mazda, Subaru 등 모든 OEM 포함.`
               }
             ],
             response_format: { type: 'json_object' },
             temperature: 0.2,
-            max_tokens: 30000,
+            max_tokens: 12000,
           }),
         });
 
@@ -282,6 +400,13 @@ serve(async (req) => {
     }
 
     dashboardData.motorSpecs = dedupeAndSortMotorSpecs(mergedMotorSpecs);
+    dashboardData.motorSpecsQuality = {
+      total: dashboardData.motorSpecs.length,
+      missingPowertrain: dashboardData.motorSpecs.filter((s: MotorSpecRow) => s.powertrain === '-').length,
+      missingMotorPosition: dashboardData.motorSpecs.filter((s: MotorSpecRow) => s.motorPosition === '-').length,
+      missingRangeKm: dashboardData.motorSpecs.filter((s: MotorSpecRow) => s.rangeKm === '-').length,
+      dashPolicy: '공식 스펙 문서(WLTP/EPA/OEM 발표)로 검증 불가한 경우에만 "-" 허용',
+    };
 
     const { data: existing } = await supabase.from('market_analysis').select('id').eq('type', 'dashboard_v2').maybeSingle();
     if (existing) {

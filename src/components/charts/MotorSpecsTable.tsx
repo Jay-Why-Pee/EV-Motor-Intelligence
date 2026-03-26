@@ -148,6 +148,18 @@ export const MotorSpecsTable = ({ data }: Props) => {
     });
   }, [sorted, yearFilter, oemFilter, speedFilter, powertrainFilter]);
 
+  const missingStats = useMemo(() => {
+    return filtered.reduce(
+      (acc, spec) => {
+        if (getCellValue(spec, "powertrain") === "-") acc.powertrain += 1;
+        if (getCellValue(spec, "motorPosition") === "-") acc.motorPosition += 1;
+        if (getCellValue(spec, "rangeKm") === "-") acc.rangeKm += 1;
+        return acc;
+      },
+      { powertrain: 0, motorPosition: 0, rangeKm: 0 }
+    );
+  }, [filtered]);
+
   if (!data?.length) return null;
 
   const preview = filtered.slice(0, 5);
@@ -206,6 +218,19 @@ export const MotorSpecsTable = ({ data }: Props) => {
         </div>
         <Filters />
         <SpecTable specs={preview} />
+        <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+          <p>
+            '-' 표기는 공식 출처(OEM 스펙시트/WLTP/EPA/공식 발표)에서 검증 가능한 수치를 확인하지 못한 경우에만 사용됩니다.
+          </p>
+          <p>
+            HEV/MHEV는 EV 모드 주행거리(km)를 제조사가 별도 공개하지 않는 경우가 많아 주행거리 열이 '-'로 남을 수 있습니다.
+          </p>
+          {(missingStats.powertrain > 0 || missingStats.motorPosition > 0 || missingStats.rangeKm > 0) && (
+            <p>
+              현재 필터 결과 미확인 건수 — 파워트레인 {missingStats.powertrain}건 · 모터 위치 {missingStats.motorPosition}건 · 주행거리 {missingStats.rangeKm}건
+            </p>
+          )}
+        </div>
         {filtered.length > 5 && (
           <div className="flex justify-center mt-4">
             <Button variant="outline" onClick={() => setExpanded(true)} className="gap-2">
