@@ -11,12 +11,15 @@ interface MotorSpec {
   year: string;
   oem: string;
   model: string;
+  powertrain: string;
+  motorPosition: string;
   segment: string;
   priceUsd: string;
   motorSupplier: string;
   torqueNm: string;
   powerKw: string;
   maxSpeedRpm: string;
+  rangeKm: string;
   notable: string;
   torqueVehicle?: string;
   torqueMotor?: string;
@@ -34,12 +37,15 @@ const columns = [
   { key: "year", label: "출시년도" },
   { key: "oem", label: "OEM" },
   { key: "model", label: "차종" },
+  { key: "powertrain", label: "파워트레인" },
+  { key: "motorPosition", label: "모터 위치" },
   { key: "segment", label: "Segment" },
   { key: "priceUsd", label: "가격 (USD)" },
   { key: "motorSupplier", label: "모터 공급사" },
   { key: "torqueNm", label: "토크 (Nm)" },
   { key: "powerKw", label: "출력 (kW)" },
   { key: "maxSpeedRpm", label: "최대속도 (rpm)" },
+  { key: "rangeKm", label: "주행거리 (km)" },
   { key: "notable", label: "주목 기술" },
 ];
 
@@ -62,8 +68,11 @@ const formatCell = (key: string, val: string): string => {
   }
   // For torque, power, maxSpeed — strip units, show numbers only (units are in header)
   if (key === "torqueNm" || key === "powerKw" || key === "maxSpeedRpm") {
-    // Support slash-separated dual motor values like "300/200"
     const cleaned = String(val).replace(/\s*(Nm|kW|rpm)\s*/gi, "").trim();
+    return cleaned;
+  }
+  if (key === "rangeKm") {
+    const cleaned = String(val).replace(/\s*(km|mi)\s*/gi, "").trim();
     return cleaned;
   }
   return val;
@@ -111,6 +120,7 @@ export const MotorSpecsTable = ({ data }: Props) => {
   const [yearFilter, setYearFilter] = useState("all");
   const [oemFilter, setOemFilter] = useState("all");
   const [speedFilter, setSpeedFilter] = useState("all");
+  const [powertrainFilter, setPowertrainFilter] = useState("all");
 
   const sorted = useMemo(() =>
     data?.length
@@ -121,11 +131,13 @@ export const MotorSpecsTable = ({ data }: Props) => {
 
   const years = useMemo(() => [...new Set(sorted.map(s => s.year).filter(y => y !== "-"))].sort((a, b) => b.localeCompare(a)), [sorted]);
   const oems = useMemo(() => [...new Set(sorted.map(s => s.oem).filter(o => o !== "-"))].sort(), [sorted]);
+  const powertrains = useMemo(() => [...new Set(sorted.map(s => s.powertrain).filter(p => p && p !== "-"))].sort(), [sorted]);
 
   const filtered = useMemo(() => {
     return sorted.filter(spec => {
       if (yearFilter !== "all" && spec.year !== yearFilter) return false;
       if (oemFilter !== "all" && spec.oem !== oemFilter) return false;
+      if (powertrainFilter !== "all" && spec.powertrain !== powertrainFilter) return false;
       if (speedFilter !== "all") {
         const speed = getSpeedNumeric(spec);
         if (speedFilter === "low" && speed > 10000) return false;
@@ -134,7 +146,7 @@ export const MotorSpecsTable = ({ data }: Props) => {
       }
       return true;
     });
-  }, [sorted, yearFilter, oemFilter, speedFilter]);
+  }, [sorted, yearFilter, oemFilter, speedFilter, powertrainFilter]);
 
   if (!data?.length) return null;
 
@@ -169,6 +181,15 @@ export const MotorSpecsTable = ({ data }: Props) => {
           <SelectItem value="low">~10,000 rpm</SelectItem>
           <SelectItem value="mid">10,001~16,000 rpm</SelectItem>
           <SelectItem value="high">16,001 rpm~</SelectItem>
+        </SelectContent>
+      </Select>
+      <Select value={powertrainFilter} onValueChange={setPowertrainFilter}>
+        <SelectTrigger className="w-[150px] h-9 text-sm">
+          <SelectValue placeholder="파워트레인" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">전체 타입</SelectItem>
+          {powertrains.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
         </SelectContent>
       </Select>
     </div>

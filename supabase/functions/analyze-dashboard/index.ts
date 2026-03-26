@@ -10,12 +10,15 @@ interface MotorSpecRow {
   year: string;
   oem: string;
   model: string;
+  powertrain: string;
+  motorPosition: string;
   segment: string;
   priceUsd: string;
   motorSupplier: string;
   torqueNm: string;
   powerKw: string;
   maxSpeedRpm: string;
+  rangeKm: string;
   notable: string;
 }
 
@@ -32,12 +35,15 @@ const normalizeMotorSpec = (raw: any): MotorSpecRow => ({
   year: normalizeField(raw?.year),
   oem: normalizeField(raw?.oem),
   model: normalizeField(raw?.model),
+  powertrain: normalizeField(raw?.powertrain),
+  motorPosition: normalizeField(raw?.motorPosition),
   segment: normalizeField(raw?.segment),
   priceUsd: normalizeField(raw?.priceUsd),
   motorSupplier: normalizeField(raw?.motorSupplier),
   torqueNm: normalizeField(raw?.torqueNm),
   powerKw: normalizeField(raw?.powerKw),
   maxSpeedRpm: normalizeField(raw?.maxSpeedRpm),
+  rangeKm: normalizeField(raw?.rangeKm),
   notable: normalizeField(raw?.notable),
 });
 
@@ -51,7 +57,7 @@ const dedupeAndSortMotorSpecs = (specs: any[]): MotorSpecRow[] => {
     if (!map.has(key)) map.set(key, spec);
   }
 
-  return [...map.values()].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+  return [...map.values()].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)).slice(0, 300);
 };
 
 const parseJsonFromModel = (content: string) => {
@@ -111,12 +117,15 @@ serve(async (req) => {
       "year": "출시연도(예: 2024)",
       "oem": "완성차 제조사",
       "model": "차종명",
+      "powertrain": "BEV|PHEV|MHEV|HEV",
+      "motorPosition": "P1|P2|P3|P4|P1+P3|P2+P4|기타 조합",
       "segment": "세그먼트(B-SUV, D-Sedan 등)",
       "priceUsd": "가격(USD, 숫자만. 예: 42990)",
       "motorSupplier": "모터 공급업체",
       "torqueNm": "모터 최대 토크(Nm, 숫자만)",
       "powerKw": "모터 최대 출력(kW, 숫자만)",
       "maxSpeedRpm": "모터 최대 회전수(rpm, 숫자만)",
+      "rangeKm": "공식 주행가능거리(km, 숫자만. 예: 510)",
       "notable": "주목할 기술 특징"
     }
   ],
@@ -135,15 +144,17 @@ serve(async (req) => {
    - 반드시 제외할 단어: EV, 전기차, 배터리, 모터, 소프트웨어, 인버터, 자동차, 하이브리드, 전동화, Electric Vehicle, Battery, Motor, Software, Inverter 등 비기술적 통칭/일반 개념어.
    - 포함할 단어 예시: Hairpin Winding, SiC MOSFET, 800V Architecture, e-Axle, IPMSM, Flat Wire, NdFeB, Ferrite Magnet, Axial Flux, Distributed Winding, Concentrated Winding, Oil Cooling, Water Jacket, Bar Winding, I-pin, Segment Conductor, Dual Rotor, Halbach Array, Reluctance Torque, Back-EMF, GaN, Continuous Casting, Die-cast Copper Rotor 등 구체적 기술 용어만.
 
-2. motorSpecs: 글로벌 주요 완성차 OEM들의 확인 가능한 모든 BEV/HEV/PHEV 차종 정보를 최대한 많이 수집 (최소 80개, 가능하면 120개 이상).
+2. motorSpecs: 글로벌 주요 완성차 OEM들의 확인 가능한 모든 BEV/HEV/PHEV/MHEV 차종 정보를 최대한 많이 수집 (최소 150개, 목표 300개).
    - 출시연도(year) 내림차순 정렬.
+   - powertrain: 반드시 BEV, PHEV, MHEV, HEV 중 하나로 표기.
+   - motorPosition: 모터가 장착된 위치를 P1(엔진 앞), P2(엔진-변속기 사이), P3(변속기 출력), P4(차축 직결) 중 해당 값으로 표기. 듀얼 모터면 "P2+P4"처럼 조합 표기. BEV는 대부분 P3 또는 P3+P4. 확인 불가 시 "-".
+   - rangeKm: 공식 발표 주행가능거리(WLTP 또는 EPA 기준, km). 숫자만. 확인 불가 시 "-".
    - 반드시 실제로 공개된/검증된 스펙만 입력. 확인 불가 시 "-"로 표기 (절대 추측하지 말 것, "정보 없음" 문자열 금지).
-    - 단위: 가격은 USD 숫자만(예: 42990), 토크는 Nm 숫자만, 출력은 kW 숫자만, 회전수는 rpm 숫자만. 단위 문자열은 절대 포함하지 말 것.
-    - 듀얼 모터 차량의 경우: 토크/출력을 슬래시로 구분 표기 (예: 전/후 모터 300Nm/200Nm → "300/200", 150kW/200kW → "150/200"). 단일 모터는 숫자만.
-    - 포함 OEM: Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, SAIC, Changan, GAC Aion, Xiaomi 등.
-    - 차량의 공식 스펙시트에서 motor max torque(Nm), motor max power(kW), motor max speed(rpm) 정보를 찾아 입력. 차량 레벨 토크/출력이면 notable에 "(차량 레벨)" 표기.
-    - 중복 차종은 제거하고 차종명+트림은 명확히 구분.
-    - 최소 100개 이상의 차종을 반드시 포함할 것. 누락 없이 가능한 한 모든 BEV/HEV/PHEV 모델을 포함.
+   - 단위: 가격은 USD 숫자만, 토크는 Nm 숫자만, 출력은 kW 숫자만, 회전수는 rpm 숫자만, 주행거리는 km 숫자만. 단위 문자열은 절대 포함하지 말 것.
+   - 듀얼 모터 차량의 경우: 토크/출력을 슬래시로 구분 표기 (예: "300/200", "150/200"). 단일 모터는 숫자만.
+   - 포함 OEM: Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, SAIC, Changan, GAC Aion, Xiaomi, CATL/Avatr, Chery, Great Wall/ORA, MG/SAIC, Vinfast, Tata, Mahindra, Lotus, McLaren, Ferrari, Lamborghini, Mazda, Subaru, Mitsubishi, Suzuki, Dacia, Skoda, SEAT/Cupra, Opel, Fiat, Jeep, Dodge, RAM, Chrysler, Buick, Cadillac, Lincoln, Acura, Infiniti, Lexus, Genesis, Smart, Mini, Rolls-Royce, Bentley, Maserati, Alfa Romeo, Lancia, DS, Citroen, Peugeot 등.
+   - 중복 차종은 제거하고 차종명+트림은 명확히 구분.
+   - 최소 150개 이상의 차종을 반드시 포함할 것.
 
 3. roadmap:
    - PRM(Product Roadmap): PMSM, Non-PMSM, P1~P4 구동 방식, BEV/xHEV별 제품 발전 방향. 2020~2028 범위. 8~15개 항목.
@@ -160,11 +171,11 @@ serve(async (req) => {
         model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요. motorSpecs는 뉴스에 언급된 차종뿐 아니라 글로벌 주요 완성차의 BEV/HEV/PHEV 전체 라인업을 폭넓게 포함해주세요. 최소 80개 이상, 가능하면 120개 이상 차종을 목표로 하세요.` }
+          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요. motorSpecs는 뉴스에 언급된 차종뿐 아니라 글로벌 모든 완성차의 BEV/HEV/PHEV/MHEV 전체 라인업을 포함해주세요. 최소 150개 이상 차종을 목표로 하세요. 각 차종에 powertrain(BEV/PHEV/MHEV/HEV), motorPosition(P1~P4 조합), rangeKm(주행가능거리) 정보를 반드시 포함하세요.` }
         ],
         response_format: { type: "json_object" },
         temperature: 0.5,
-        max_tokens: 20000,
+        max_tokens: 30000,
       }),
     });
 
@@ -179,8 +190,9 @@ serve(async (req) => {
     const dashboardData = parseJsonFromModel(modelContent);
     let mergedMotorSpecs = Array.isArray(dashboardData.motorSpecs) ? dashboardData.motorSpecs : [];
 
-    if (mergedMotorSpecs.length < 40) {
+    if (mergedMotorSpecs.length < 150) {
       try {
+        const existingModels = mergedMotorSpecs.map((s: any) => `${s.oem}::${s.model}`).join(', ');
         const supplementRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -192,16 +204,16 @@ serve(async (req) => {
             messages: [
               {
                 role: 'system',
-                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "notable": "주목 기술(차량 레벨이면 표기)"\n    }\n  ]\n}\n규칙: BEV/HEV/PHEV 글로벌 주요 모델을 120개 이상 작성, 공개 검증 불가 값은 '-'로 표기, '정보 없음' 금지, 중복 금지, 연도 내림차순.`
+                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "powertrain": "BEV|PHEV|MHEV|HEV",\n      "motorPosition": "P1|P2|P3|P4|P2+P4 등",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "rangeKm": "주행가능거리(km 숫자)",\n      "notable": "주목 기술"\n    }\n  ]\n}\n규칙: BEV/HEV/PHEV/MHEV 글로벌 모든 모델을 200개 이상 작성, 공개 검증 불가 값은 '-'로 표기, '정보 없음' 금지, 중복 금지, 연도 내림차순. 듀얼 모터 토크/출력은 슬래시 구분(예: 300/200).`
               },
               {
                 role: 'user',
-                content: 'Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault 등 주요 OEM의 전동화 차종을 폭넓게 포함해서 motorSpecs를 생성해줘.'
+                content: `이미 포함된 차종: ${existingModels}\n\n위 차종을 제외하고 누락된 글로벌 BEV/PHEV/MHEV/HEV 차종을 200개 이상 추가로 생성해줘. Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, Chery, Great Wall, MG, Vinfast, Tata, Lotus, Lexus, Genesis, Mini, Cupra, Mazda, Subaru 등 모든 OEM 포함.`
               }
             ],
             response_format: { type: 'json_object' },
             temperature: 0.2,
-            max_tokens: 12000,
+            max_tokens: 30000,
           }),
         });
 
