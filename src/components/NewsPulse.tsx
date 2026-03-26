@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "./ui/card";
-import { Button } from "./ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Zap, RefreshCw, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Zap, Loader2 } from "lucide-react";
 
 interface InsightSection {
   title: string;
@@ -27,8 +25,6 @@ export const NewsPulse = () => {
   const [insight, setInsight] = useState<Insight | null>(null);
   const [parsedContent, setParsedContent] = useState<InsightContent | null>(null);
   const [loading, setLoading] = useState(true);
-  const [analyzing, setAnalyzing] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => { fetchInsight(); }, []);
 
@@ -91,18 +87,9 @@ export const NewsPulse = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Zap className="w-6 h-6 text-chart-3" />
-          <h2 className="text-2xl font-bold">News Pulse</h2>
-        </div>
-        <Button onClick={generateInsight} disabled={analyzing} variant="outline" size="sm">
-          {analyzing ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />분석 중...</>
-          ) : (
-            <><RefreshCw className="w-4 h-4 mr-2" />새로 분석</>
-          )}
-        </Button>
+      <div className="flex items-center gap-3">
+        <Zap className="w-6 h-6 text-chart-3" />
+        <h2 className="text-2xl font-bold">News Pulse</h2>
       </div>
 
       {insight && parsedContent ? (
@@ -141,10 +128,7 @@ export const NewsPulse = () => {
       ) : (
         <Card className="p-6 text-center">
           <Zap className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-          <p className="text-muted-foreground mb-3 text-sm">아직 생성된 분석이 없습니다.</p>
-          <Button onClick={generateInsight} disabled={analyzing} size="sm">
-            {analyzing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />분석 중...</> : '첫 분석 생성하기'}
-          </Button>
+          <p className="text-muted-foreground text-sm">아직 생성된 분석이 없습니다. 자동 업데이트 시 생성됩니다.</p>
         </Card>
       )}
     </div>
