@@ -11,9 +11,9 @@ interface Props {
 }
 
 export const WordCloudChart = ({ data }: Props) => {
-  if (!data?.length) return null;
-
   const words = useMemo(() => {
+    if (!data?.length) return [];
+
     const maxVal = Math.max(...data.map(d => d.value));
     const minVal = Math.min(...data.map(d => d.value));
     const range = maxVal - minVal || 1;
@@ -40,6 +40,8 @@ export const WordCloudChart = ({ data }: Props) => {
         };
       });
   }, [data]);
+
+  if (!words.length) return null;
 
   return (
     <Card className="p-4 md:p-6 card-glow">
