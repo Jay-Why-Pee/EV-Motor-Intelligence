@@ -122,24 +122,77 @@ const parseJson = (content: string) => {
   if (s >= 0 && end > s) {
     try { return JSON.parse(fixTrailing(cleaned.slice(s, end + 1))); } catch {}
   }
+
+  // Handle truncated JSON: try to repair by closing open brackets
+  if (s >= 0) {
+    let repaired = cleaned.slice(s);
+    // Find last complete object in an array (last '}')
+    const lastCloseBrace = repaired.lastIndexOf('}');
+    if (lastCloseBrace > 0) {
+      repaired = repaired.slice(0, lastCloseBrace + 1);
+      // Count unclosed brackets
+      let openBraces = 0, openBrackets = 0;
+      let inS = false, isEsc = false;
+      for (const ch of repaired) {
+        if (isEsc) { isEsc = false; continue; }
+        if (ch === '\\') { isEsc = true; continue; }
+        if (ch === '"') { inS = !inS; continue; }
+        if (inS) continue;
+        if (ch === '{') openBraces++;
+        if (ch === '}') openBraces--;
+        if (ch === '[') openBrackets++;
+        if (ch === ']') openBrackets--;
+      }
+      repaired += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
+      try { 
+        const result = JSON.parse(fixTrailing(repaired));
+        console.warn('Repaired truncated JSON successfully');
+        return result;
+      } catch {}
+    }
+  }
   
   throw new Error('JSON parse failed');
 };
 
-const callAi = async (apiKey: string, model: string, system: string, user: string, maxTokens: number, temp: number) => {
-  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-      response_format: { type: 'json_object' }, temperature: temp, max_tokens: maxTokens,
-    }),
-  });
-  if (!res.ok) throw new Error(`AI ${res.status}`);
-  const data = await res.json();
-  const text = data?.choices?.[0]?.message?.content;
-  if (!text) throw new Error('Empty AI response');
-  return parseJson(text);
+const callAi = async (apiKey: string, model: string, system: string, user: string, maxTokens: number, temp: number, retries = 2): Promise<any> => {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+          response_format: { type: 'json_object' }, temperature: temp, max_tokens: maxTokens,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        console.error(`AI HTTP ${res.status} (attempt ${attempt}): ${body.slice(0, 500)}`);
+        if (attempt < retries) continue;
+        throw new Error(`AI ${res.status}`);
+      }
+      const data = await res.json();
+      const text = data?.choices?.[0]?.message?.content;
+      const finishReason = data?.choices?.[0]?.finish_reason;
+      if (!text) {
+        console.error(`Empty AI response (attempt ${attempt}), finish_reason: ${finishReason}`);
+        if (attempt < retries) continue;
+        throw new Error('Empty AI response');
+      }
+      if (finishReason === 'length') {
+        console.warn(`AI response truncated (attempt ${attempt}), trying with fewer tokens...`);
+      }
+      console.log(`AI response (attempt ${attempt}): ${text.length} chars, finish: ${finishReason}`);
+      return parseJson(text);
+    } catch (e) {
+      if (attempt < retries && (e as Error).message?.includes('parse')) {
+        console.warn(`JSON parse failed (attempt ${attempt}), retrying...`);
+        continue;
+      }
+      throw e;
+    }
+  }
 };
 
 serve(async (req) => {
@@ -187,25 +240,25 @@ PRM 20개 이상: 모터 아키텍처(IPMSM→EESM→Axial Flux), 800V, 멀티�
 TRM 35개 이상: Stator Core(NO Steel→Amorphous), Hairpin Winding(I-pin→Continuous), Rotor Magnet(NdFeB→Dy-free→Ferrite), Cooling(Oil Spray→Direct Slot), SiC MOSFET(Planar→Trench), Resolver→Inductive Encoder, Lamination(0.3mm→0.2mm→0.1mm), Busbar(Cu→Al→Flexible PCB), Housing(Al Cast→CFRP), Insulation(Class H→Class R), Bearing(Steel→Ceramic→Mag), Sealing(Lip→Labyrinth→Mag), Connector(HV Cu→Al), NVH(Skew→Active Noise Cancel), EMC Shielding, Thermal Interface Material, Winding End-Turn 최적화 등. 2024~2035년 범위.
 status: 2024이전 past, 2024-2025 current, 2026+ future.`;
 
-    // 2) Motor specs - incremental update (top 80 new/updated models only)
+    // 2) Motor specs - incremental update (compact format, 50 models)
     const motorPrompt = `글로벌 EV/HEV 파워트레인 데이터 리서처. JSON으로 답해라.
-{"motorSpecs":[{"year":"","oem":"","model":"","powertrain":"BEV|PHEV|MHEV|HEV","motorPosition":"P0~P4","segment":"","priceUsd":"","motorSupplier":"","torqueNm":"","powerKw":"","maxSpeedRpm":"","rangeKm":"","notable":""}]}
+{"motorSpecs":[{"year":"","oem":"","model":"","powertrain":"BEV|PHEV|MHEV|HEV","motorPosition":"P0~P4","segment":"","motorSupplier":"","torqueNm":"","powerKw":"","rangeKm":"","notable":""}]}
 
 규칙:
-- 80~120개 차종. 2023~2026 글로벌 주요 EV/HEV/PHEV 차종.
+- 50~60개 차종. 2024~2026 글로벌 주요 EV/HEV/PHEV 차종.
 - powertrain 필수(BEV/PHEV/MHEV/HEV 중 택1).
 - motorPosition 필수(BEV싱글→P3, 듀얼→P3+P4, PHEV→P2, MHEV→P0, HEV→P2).
-- rangeKm: BEV는 반드시 WLTP/EPA 수치 기입. HEV/MHEV는 EV모드 주행거리 미제공시 "-".
-- 2025 Hyundai/Kia/Genesis 필수 포함: IONIQ 5 N, IONIQ 5(롱레인지), IONIQ 6, EV3, EV5, EV6, EV6 GT, EV9, EV9 GT, Kona Electric, Niro EV, Ray EV, GV60, Electrified GV70, Electrified G80, Tucson HEV, Santa Fe HEV, Sorento HEV/PHEV, Sportage HEV/PHEV, K8 HEV, K5 HEV, Carnival HEV 등
-- Tesla, BMW, Mercedes, VW, Toyota, BYD, Xiaomi, Rivian, Lucid 등 글로벌 OEM도 포함.
-- "정보 없음" 금지. 불가시 "-"만. 듀얼모터 토크/출력은 슬래시(/) 구분.`;
+- rangeKm: BEV는 WLTP/EPA 수치. HEV/MHEV는 "-".
+- 2025 Hyundai/Kia/Genesis 필수: IONIQ 5 N, IONIQ 5, IONIQ 6, EV3, EV5, EV6, EV6 GT, EV9, EV9 GT, Kona Electric, Niro EV, GV60, Electrified GV70, Electrified G80, Tucson HEV, Santa Fe HEV, Sorento HEV/PHEV, Sportage HEV/PHEV
+- Tesla, BMW, Mercedes, VW, Toyota, BYD 등 글로벌 OEM도 포함.
+- "정보 없음" 금지. 불가시 "-"만. notable은 10자 이내로 간결하게.`;
 
     console.log('Starting AI calls...');
 
     // Run both in parallel
     const [overviewData, motorData] = await Promise.all([
       callAi(apiKey, 'google/gemini-2.5-flash', overviewPrompt, `최근 뉴스 ${newsData.length}건:\n${newsBrief}`, 8000, 0.4),
-      callAi(apiKey, 'google/gemini-2.5-flash', motorPrompt, `최근 뉴스 참고:\n${newsBrief.slice(0, 3000)}`, 10000, 0.15),
+      callAi(apiKey, 'google/gemini-2.5-flash', motorPrompt, `최근 뉴스 참고:\n${newsBrief.slice(0, 2000)}`, 12000, 0.15),
     ]);
 
     console.log('AI calls complete');
