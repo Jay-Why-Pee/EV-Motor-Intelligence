@@ -61,22 +61,6 @@ export const NewsPulse = () => {
     }
   };
 
-  const generateInsight = async () => {
-    try {
-      setAnalyzing(true);
-      toast({ title: "분석 시작", description: "AI가 뉴스를 분석하고 있습니다..." });
-      const { data, error } = await supabase.functions.invoke('analyze-news');
-      if (error) throw error;
-      toast({ title: "분석 완료", description: `${data.insight.news_analyzed_count}개의 뉴스를 분석했습니다.` });
-      await fetchInsight();
-    } catch (error) {
-      console.error('Error generating insight:', error);
-      toast({ title: "분석 실패", description: "인사이트 생성 중 오류가 발생했습니다.", variant: "destructive" });
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
