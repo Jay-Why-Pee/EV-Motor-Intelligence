@@ -49,19 +49,16 @@ serve(async (req) => {
   ],
   "motorSpecs": [
     {
+      "year": "출시연도(예: 2024)",
       "oem": "완성차 제조사",
       "model": "차종명",
       "segment": "세그먼트(B-SUV, D-Sedan 등)",
-      "priceUsd": "가격(USD)",
+      "priceUsd": "가격(USD, 숫자만. 예: 42990)",
       "motorSupplier": "모터 공급업체",
-      "motorName": "모터 이름/모델명",
-      "torqueVehicle": "차량 토크(Nm)",
-      "torqueMotor": "모터 토크(Nm)",
-      "powerVehicle": "차량 출력(kW or HP)",
-      "powerMotor": "모터 출력(kW)",
-      "maxSpeedVehicle": "차량 최대속도(km/h)",
-      "maxSpeedMotor": "모터 최대 RPM",
-      "weightMotor": "모터 중량(kg)",
+      "torqueNm": "모터 최대 토크(Nm, 숫자만)",
+      "powerKw": "모터 최대 출력(kW, 숫자만)",
+      "maxSpeedRpm": "모터 최대 회전수(rpm, 숫자만)",
+      "weightKg": "모터 중량(kg, 숫자만)",
       "notable": "주목할 기술 특징"
     }
   ],
@@ -76,11 +73,16 @@ serve(async (req) => {
 }
 
 규칙:
-1. wordCloud: 20~30개의 EV 모터 기술 키워드. 뉴스에서 자주 언급되는 기술(Hairpin, SiC, 800V, e-Axle, IPMSM, Flat Wire, NdFeB, Ferrite, Axial Flux 등)의 상대적 빈도를 value로 표현.
+1. wordCloud: 20~30개의 EV 모터 전문 기술 키워드만 포함.
+   - 반드시 제외할 단어: EV, 전기차, 배터리, 모터, 소프트웨어, 인버터, 자동차, 하이브리드, 전동화, Electric Vehicle, Battery, Motor, Software, Inverter 등 비기술적 통칭/일반 개념어.
+   - 포함할 단어 예시: Hairpin Winding, SiC MOSFET, 800V Architecture, e-Axle, IPMSM, Flat Wire, NdFeB, Ferrite Magnet, Axial Flux, Distributed Winding, Concentrated Winding, Oil Cooling, Water Jacket, Bar Winding, I-pin, Segment Conductor, Dual Rotor, Halbach Array, Reluctance Torque, Back-EMF, GaN, Continuous Casting, Die-cast Copper Rotor 등 구체적 기술 용어만.
 
-2. motorSpecs: 실제 출시된 EV/HEV 차량에 장착된 모터 정보 15~25개. 최신 차종 우선 정렬.
-   - 반드시 실제로 존재하는 정보만 입력. 없는 정보는 "정보 없음"으로 표기.
-   - Tesla Model 3/Y/S/X, Hyundai Ioniq 5/6, Kia EV6/EV9, BMW iX/i4, Mercedes EQS/EQE, BYD Seal/Han, VW ID.4, Porsche Taycan, Lucid Air, Rivian R1T 등 실제 차종.
+2. motorSpecs: 글로벌 주요 완성차 OEM들의 확인 가능한 모든 BEV/PHEV 차종 정보를 최대한 많이 수집 (40~80개 목표).
+   - 출시연도(year) 내림차순 정렬.
+   - 반드시 실제로 공개된/검증된 스펙만 입력. 확인 불가 시 "-"로 표기 (절대 추측하지 말 것).
+   - 단위: 가격은 USD 숫자만(예: 42990), 토크는 Nm, 출력은 kW, 회전수는 rpm, 중량은 kg.
+   - 포함 OEM: Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault 등.
+   - 차량의 공식 스펙시트에서 motor max torque(Nm), motor max power(kW), motor max speed(rpm) 정보를 찾아 입력. 차량 레벨 토크/출력이 아닌 모터 단품 스펙 우선. 모터 단품 스펙을 모르면 차량 레벨 값 입력 후 notable에 "(차량 레벨)" 표기.
 
 3. roadmap:
    - PRM(Product Roadmap): PMSM, Non-PMSM, P1~P4 구동 방식, BEV/xHEV별 제품 발전 방향. 2020~2028 범위. 8~15개 항목.
