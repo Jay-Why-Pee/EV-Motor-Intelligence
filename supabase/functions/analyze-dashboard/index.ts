@@ -171,11 +171,11 @@ serve(async (req) => {
         model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요. motorSpecs는 뉴스에 언급된 차종뿐 아니라 글로벌 주요 완성차의 BEV/HEV/PHEV 전체 라인업을 폭넓게 포함해주세요. 최소 80개 이상, 가능하면 120개 이상 차종을 목표로 하세요.` }
+          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요. motorSpecs는 뉴스에 언급된 차종뿐 아니라 글로벌 모든 완성차의 BEV/HEV/PHEV/MHEV 전체 라인업을 포함해주세요. 최소 150개 이상 차종을 목표로 하세요. 각 차종에 powertrain(BEV/PHEV/MHEV/HEV), motorPosition(P1~P4 조합), rangeKm(주행가능거리) 정보를 반드시 포함하세요.` }
         ],
         response_format: { type: "json_object" },
         temperature: 0.5,
-        max_tokens: 20000,
+        max_tokens: 30000,
       }),
     });
 
@@ -190,8 +190,9 @@ serve(async (req) => {
     const dashboardData = parseJsonFromModel(modelContent);
     let mergedMotorSpecs = Array.isArray(dashboardData.motorSpecs) ? dashboardData.motorSpecs : [];
 
-    if (mergedMotorSpecs.length < 40) {
+    if (mergedMotorSpecs.length < 150) {
       try {
+        const existingModels = mergedMotorSpecs.map((s: any) => `${s.oem}::${s.model}`).join(', ');
         const supplementRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -203,16 +204,16 @@ serve(async (req) => {
             messages: [
               {
                 role: 'system',
-                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "notable": "주목 기술(차량 레벨이면 표기)"\n    }\n  ]\n}\n규칙: BEV/HEV/PHEV 글로벌 주요 모델을 120개 이상 작성, 공개 검증 불가 값은 '-'로 표기, '정보 없음' 금지, 중복 금지, 연도 내림차순.`
+                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "powertrain": "BEV|PHEV|MHEV|HEV",\n      "motorPosition": "P1|P2|P3|P4|P2+P4 등",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "rangeKm": "주행가능거리(km 숫자)",\n      "notable": "주목 기술"\n    }\n  ]\n}\n규칙: BEV/HEV/PHEV/MHEV 글로벌 모든 모델을 200개 이상 작성, 공개 검증 불가 값은 '-'로 표기, '정보 없음' 금지, 중복 금지, 연도 내림차순. 듀얼 모터 토크/출력은 슬래시 구분(예: 300/200).`
               },
               {
                 role: 'user',
-                content: 'Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault 등 주요 OEM의 전동화 차종을 폭넓게 포함해서 motorSpecs를 생성해줘.'
+                content: `이미 포함된 차종: ${existingModels}\n\n위 차종을 제외하고 누락된 글로벌 BEV/PHEV/MHEV/HEV 차종을 200개 이상 추가로 생성해줘. Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, Chery, Great Wall, MG, Vinfast, Tata, Lotus, Lexus, Genesis, Mini, Cupra, Mazda, Subaru 등 모든 OEM 포함.`
               }
             ],
             response_format: { type: 'json_object' },
             temperature: 0.2,
-            max_tokens: 12000,
+            max_tokens: 30000,
           }),
         });
 
