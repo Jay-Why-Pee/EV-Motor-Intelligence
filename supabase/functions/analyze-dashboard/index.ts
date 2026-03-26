@@ -122,6 +122,35 @@ const parseJson = (content: string) => {
   if (s >= 0 && end > s) {
     try { return JSON.parse(fixTrailing(cleaned.slice(s, end + 1))); } catch {}
   }
+
+  // Handle truncated JSON: try to repair by closing open brackets
+  if (s >= 0) {
+    let repaired = cleaned.slice(s);
+    // Find last complete object in an array (last '}')
+    const lastCloseBrace = repaired.lastIndexOf('}');
+    if (lastCloseBrace > 0) {
+      repaired = repaired.slice(0, lastCloseBrace + 1);
+      // Count unclosed brackets
+      let openBraces = 0, openBrackets = 0;
+      let inS = false, isEsc = false;
+      for (const ch of repaired) {
+        if (isEsc) { isEsc = false; continue; }
+        if (ch === '\\') { isEsc = true; continue; }
+        if (ch === '"') { inS = !inS; continue; }
+        if (inS) continue;
+        if (ch === '{') openBraces++;
+        if (ch === '}') openBraces--;
+        if (ch === '[') openBrackets++;
+        if (ch === ']') openBrackets--;
+      }
+      repaired += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
+      try { 
+        const result = JSON.parse(fixTrailing(repaired));
+        console.warn('Repaired truncated JSON successfully');
+        return result;
+      } catch {}
+    }
+  }
   
   throw new Error('JSON parse failed');
 };
