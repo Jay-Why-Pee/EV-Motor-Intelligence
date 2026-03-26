@@ -176,16 +176,160 @@ const dedupeAndSortMotorSpecs = (specs: any[]): MotorSpecRow[] => {
   return [...map.values()].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)).slice(0, 300);
 };
 
+const sanitizeJsonText = (content: string): string =>
+  content
+    .replace(/```json\s*/gi, '')
+    .replace(/```/g, '')
+    .replace(/\u0000/g, '')
+    .trim();
+
+const extractBalancedJsonObject = (input: string): string | null => {
+  const start = input.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < input.length; i += 1) {
+    const ch = input[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === '{') depth += 1;
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return input.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
+};
+
+const tryParseJson = (jsonText: string) => {
+  const withoutTrailingCommas = jsonText.replace(/,\s*([}\]])/g, '$1');
+  return JSON.parse(withoutTrailingCommas);
+};
+
 const parseJsonFromModel = (content: string) => {
-  const cleaned = content.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  const cleaned = sanitizeJsonText(content);
+
   try {
-    return JSON.parse(cleaned);
+    return tryParseJson(cleaned);
   } catch {
-    const match = cleaned.match(/{[\s\S]*}/);
-    if (!match) throw new Error('AI 응답 JSON 파싱 실패');
-    return JSON.parse(match[0]);
+    const balanced = extractBalancedJsonObject(cleaned);
+    if (balanced) {
+      try {
+        return tryParseJson(balanced);
+      } catch {
+        // fallback below
+      }
+    }
+
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return tryParseJson(cleaned.slice(firstBrace, lastBrace + 1));
+    }
+
+    throw new Error('AI 응답 JSON 파싱 실패');
   }
 };
+
+class AiRequestError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+const callAiJson = async ({
+  lovableApiKey,
+  model,
+  messages,
+  maxTokens,
+  temperature,
+  retries = 1,
+}: {
+  lovableApiKey: string;
+  model: string;
+  messages: AiMessage[];
+  maxTokens: number;
+  temperature: number;
+  retries?: number;
+}) => {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        response_format: { type: 'json_object' },
+        temperature,
+        max_tokens: maxTokens,
+      }),
+    });
+
+    if (!res.ok) {
+      if (res.status === 429 || res.status === 402) {
+        throw new AiRequestError(res.status, `AI error: ${res.status}`);
+      }
+
+      lastError = new AiRequestError(res.status, `AI error: ${res.status}`);
+      if (attempt >= retries) throw lastError;
+      continue;
+    }
+
+    const aiData = await res.json();
+    const content = aiData?.choices?.[0]?.message?.content;
+    if (!content || typeof content !== 'string') {
+      lastError = new Error('AI 응답이 비어있습니다');
+      if (attempt >= retries) throw lastError;
+      continue;
+    }
+
+    try {
+      return parseJsonFromModel(content);
+    } catch (parseError) {
+      lastError = parseError;
+      if (attempt >= retries) throw parseError;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('AI 요청 실패');
+};
+
+const needsCriticalFieldBackfill = (spec: MotorSpecRow): boolean =>
+  spec.powertrain === '-'
+  || spec.motorPosition === '-'
+  || ((spec.powertrain === 'BEV' || spec.powertrain === 'PHEV') && spec.rangeKm === '-');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -211,7 +355,7 @@ serve(async (req) => {
       .from('news')
       .select('*')
       .order('date', { ascending: false })
-      .limit(60);
+      .limit(180);
 
     if (!newsData?.length) {
       return new Response(JSON.stringify({ error: '분석할 뉴스 데이터가 없습니다' }), {
@@ -223,174 +367,114 @@ serve(async (req) => {
       `[${a.category?.join(', ')}] ${a.title_kr}\n${String(a.summary || '').slice(0, 180)}\n출처: ${a.source} (${a.date})`
     ).join('\n\n');
 
-    const systemPrompt = `당신은 전기차 모터 산업 데이터 분석 전문가입니다. 제공된 뉴스 데이터를 기반으로 3가지 섹션의 대시보드 데이터를 생성하세요.
-
-반드시 아래 JSON 구조로 응답하세요:
+    const overviewPrompt = `당신은 EV 모터 기술 리서치 애널리스트다. 아래 JSON으로만 답해라.
 {
-  "wordCloud": [
-    { "text": "키워드", "value": 숫자(1~100) }
-  ],
-  "motorSpecs": [
-    {
-      "year": "출시연도(예: 2024)",
-      "oem": "완성차 제조사",
-      "model": "차종명",
-      "powertrain": "BEV|PHEV|MHEV|HEV",
-      "motorPosition": "P1|P2|P3|P4|P1+P3|P2+P4|기타 조합",
-      "segment": "세그먼트(B-SUV, D-Sedan 등)",
-      "priceUsd": "가격(USD, 숫자만. 예: 42990)",
-      "motorSupplier": "모터 공급업체",
-      "torqueNm": "모터 최대 토크(Nm, 숫자만)",
-      "powerKw": "모터 최대 출력(kW, 숫자만)",
-      "maxSpeedRpm": "모터 최대 회전수(rpm, 숫자만)",
-      "rangeKm": "공식 주행가능거리(km, 숫자만. 예: 510)",
-      "notable": "주목할 기술 특징"
-    }
-  ],
+  "wordCloud": [{ "text": "키워드", "value": 1 }],
   "roadmap": {
-    "prm": [
-      { "year": "2024", "category": "카테고리", "title": "제목", "description": "설명", "status": "past|current|future" }
-    ],
-    "trm": [
-      { "year": "2024", "category": "카테고리", "title": "제목", "description": "설명", "status": "past|current|future" }
-    ]
+    "prm": [{ "year": "2024", "category": "카테고리", "title": "제목", "description": "설명", "status": "past|current|future" }],
+    "trm": [{ "year": "2024", "category": "카테고리", "title": "제목", "description": "설명", "status": "past|current|future" }]
   }
 }
 
 규칙:
-1. wordCloud: 20~30개의 EV 모터 전문 기술 키워드만 포함.
-   - 반드시 제외할 단어: EV, 전기차, 배터리, 모터, 소프트웨어, 인버터, 자동차, 하이브리드, 전동화, Electric Vehicle, Battery, Motor, Software, Inverter 등 비기술적 통칭/일반 개념어.
-   - 포함할 단어 예시: Hairpin Winding, SiC MOSFET, 800V Architecture, e-Axle, IPMSM, Flat Wire, NdFeB, Ferrite Magnet, Axial Flux, Distributed Winding, Concentrated Winding, Oil Cooling, Water Jacket, Bar Winding, I-pin, Segment Conductor, Dual Rotor, Halbach Array, Reluctance Torque, Back-EMF, GaN, Continuous Casting, Die-cast Copper Rotor 등 구체적 기술 용어만.
+1) wordCloud는 EV 모터 세부 기술 키워드 20~30개만.
+2) PRM 12~20개: EV 모터 제품/아키텍처 중심.
+3) TRM 24~32개: Stator Core, Winding, Rotor, Magnet, Cooling, Bearing, Inverter, Resolver, Lamination, Busbar, Housing, Insulation, Sealing 등 부품 기술 상세.
+4) status: 2024 이전 past, 2024~2025 current, 2026 이후 future.`;
 
-2. motorSpecs: 글로벌 주요 완성차 OEM들의 확인 가능한 모든 BEV/HEV/PHEV/MHEV 차종 정보를 최대한 많이 수집 (최소 150개, 목표 300개).
-   - 출시연도(year) 내림차순 정렬.
+    const motorSpecsPrompt = `당신은 글로벌 EV/HEV 파워트레인 스펙 데이터 리서처다. 아래 JSON으로만 답해라.
+{
+  "motorSpecs": [
+    {
+      "year": "출시연도",
+      "oem": "완성차 제조사",
+      "model": "차종명",
+      "powertrain": "BEV|PHEV|MHEV|HEV",
+      "motorPosition": "P0|P1|P2|P3|P4|복합(P2+P4 등)",
+      "segment": "세그먼트",
+      "priceUsd": "가격 USD 숫자",
+      "motorSupplier": "모터 공급사",
+      "torqueNm": "토크 Nm 숫자",
+      "powerKw": "출력 kW 숫자",
+      "maxSpeedRpm": "최대속도 rpm 숫자",
+      "rangeKm": "공식 주행가능거리 km 숫자",
+      "notable": "주목 기술"
+    }
+  ]
+}
 
-   ★★★ 가장 중요한 규칙 — powertrain, motorPosition, rangeKm 필드 ★★★
-   - powertrain: 반드시 BEV, PHEV, MHEV, HEV 중 하나를 기재. 모든 차종에 100% 필수.
-     * 순수 전기차 → BEV
-     * 플러그인 하이브리드 → PHEV
-     * 마일드 하이브리드(48V 등) → MHEV
-     * 풀 하이브리드(비플러그인) → HEV
-     * 이 4개 외의 값이나 "-"는 절대 불가. 반드시 4개 중 하나를 선택하라.
-   - motorPosition: 모터가 장착된 위치. 반드시 아래 규칙을 따를 것:
-     * BEV 싱글모터(후륜) → P3
-     * BEV 싱글모터(전륜) → P3
-     * BEV 듀얼모터(전후) → P3+P4
-     * BEV 트리모터 → P3+P4+P4
-     * PHEV(엔진-변속기 사이 모터) → P2
-     * PHEV(듀얼) → P2+P4
-     * HEV(ISG 타입) → P0 또는 P1
-     * HEV(변속기 내장) → P2
-     * MHEV(48V BSG) → P0
-     * 확인 불가 시에만 "-" 허용. 하지만 위 일반 규칙으로 대부분 추론 가능하므로 최대한 기재할 것.
-   - rangeKm: 공식 발표 주행가능거리(WLTP 또는 EPA 기준, km 숫자만).
-     * BEV는 반드시 주행거리가 있음. 300~700km 범위가 일반적. 반드시 기재.
-     * PHEV는 EV 모드 주행거리(20~100km 범위). 가능하면 기재.
-     * HEV/MHEV는 "-" 가능.
+핵심 규칙:
+- 최대 300개까지 글로벌 차종을 채운다(최소 220개).
+- powertrain은 반드시 BEV/PHEV/MHEV/HEV 중 하나.
+- motorPosition은 가능한 한 반드시 기입한다(BEV 싱글→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0 기본 매핑).
+- rangeKm는 BEV/PHEV는 우선적으로 채운다. 공식 검증 수치가 없을 때만 "-" 허용.
+- "정보 없음" 문자열 금지, 불가 시 "-"만 사용.
+- 2025년 Hyundai/Kia/Genesis EV/HEV/PHEV 라인업을 특히 촘촘히 포함한다(예: IONIQ 5/6, Kona Electric, EV3/EV4/EV5/EV6/EV9, GV60, Electrified GV70/G80, Tucson/Santa Fe/Sorento/Sportage HEV/PHEV 등 관련 트림 포함).
+- 중복 금지, year 내림차순.
+- 듀얼 모터 토크/출력은 슬래시 구분.`;
 
-   - 단위: 가격은 USD 숫자만, 토크는 Nm 숫자만, 출력은 kW 숫자만, 회전수는 rpm 숫자만, 주행거리는 km 숫자만. 단위 문자열은 절대 포함하지 말 것.
-   - 듀얼 모터 차량의 경우: 토크/출력을 슬래시로 구분 표기 (예: "300/200", "150/200"). 단일 모터는 숫자만.
-   - 확인 불가 값만 "-"로 표기 (절대 추측하지 말 것, "정보 없음" 문자열 금지).
-   - 포함 OEM: Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, SAIC, Changan, GAC Aion, Xiaomi, Chery, Great Wall/ORA, MG/SAIC, Vinfast, Tata, Mahindra, Lotus, Mazda, Subaru, Mitsubishi, Lexus, Genesis, Smart, Mini, Cupra, Skoda 등.
-   - 중복 차종은 제거하고 차종명+트림은 명확히 구분.
-
-3. roadmap:
-   - PRM(Product Roadmap): EV 모터 제품 기술 발전 로드맵. 2020~2030 범위. 12~20개 항목.
-     * category: "PMSM", "EESM", "SRM", "Axial Flux", "Wound Rotor", "e-Axle", "Multi-speed", "In-Wheel", "P0/P1 BSG", "P2 Hybrid", "P3 Drive", "P4 AWD", "Dual Motor", "Tri Motor" 등 EV 모터 제품 카테고리.
-     * 구체적인 모터 아키텍처 변화, 구동계 토폴로지 진화, 통합형 e-Axle 트렌드, 멀티모터 구성 등 제품 수준의 기술 흐름.
-     * 예시:
-       - 2020 past: "IPMSM 주류 채택 - V-shape IPM 로터, 분포권 고정자 기반 BEV 주력 모터 표준화"
-       - 2022 past: "Flat Wire(Hairpin) 양산 확대 - 슬롯 충전율 70%+ 달성, 효율 3~5% 향상"
-       - 2024 current: "800V 시스템 표준화 - SiC 인버터 연계, 고속충전 대응 모터 절연 설계"
-       - 2026 future: "Axial Flux 모터 양산 진입 - 고출력밀도 P4/In-wheel 적용 시작"
-       - 2028 future: "EESM(외부 여자 동기모터) 확산 - 희토류 프리 모터, 광범위 효율맵"
-
-   - TRM(Technical Roadmap): EV 모터 핵심 부품별 기술 발전 로드맵. 2020~2030 범위. 20~30개 항목.
-     * category: "Stator Core", "Stator Winding", "Rotor Core", "Rotor Magnet", "Shaft", "Bearing", "Housing", "Cooling System", "Resolver/Sensor", "Busbar", "Terminal", "Insulation", "Lamination", "Inverter/Power Module", "Connector", "Sealing/Gasket", "Balancing" 등 모터를 구성하는 모든 부품 카테고리.
-     * 각 부품별 소재, 공법, 설계 변화를 구체적으로 기술:
-       - Stator Core: 전기강판 두께(0.35→0.25→0.2mm), 자속밀도, 철손 저감, 분할 코어
-       - Stator Winding: 원형→Hairpin→Continuous Hairpin→I-pin, 슬롯 충전율 변화
-       - Rotor Core: IPM V-shape→Delta→Spoke, 브릿지 최적화, 경량화
-       - Rotor Magnet: NdFeB→저Dy NdFeB→Ferrite→희토류프리, Halbach 배열
-       - Cooling: Water Jacket→Direct Oil Cooling→Stator Slot Oil Spray→Hollow Shaft Oil
-       - Insulation: Class H→Class R, 800V 부분방전 대응, Polyimide/Enamel 변화
-       - Bearing: Ball→Ceramic Ball→Magnetic Bearing, 고속 대응
-       - Inverter: Si IGBT→SiC MOSFET→GaN, 모듈 통합, 전력밀도
-       - Resolver: Resolver→TMR→Inductive encoder, 정밀도/비용 트레이드오프
-       - Lamination: 0.35mm NO→0.25mm→0.2mm, 6.5% Si강, Amorphous
-       - Busbar: 구리→알루미늄, 적층 부스바, EMC 최적화
-       - Housing: 주철→알루미늄 다이캐스트→통합형 e-Axle 하우징
-     * 예시 항목:
-       - 2020 past Stator Winding: "Round Wire 분포권 - 슬롯 충전율 45%, 자동화 권선기 기반"
-       - 2022 past Stator Winding: "Hairpin(Flat Wire) 양산 - 슬롯 충전율 65%, 용접 공정 도입"
-       - 2024 current Stator Winding: "Continuous Hairpin - 용접점 50% 감소, I-pin 공법 검증 중"
-       - 2026 future Stator Winding: "I-pin/Segment Conductor - 슬롯 충전율 75%+, 다층 적층"
-       - 2020 past Rotor Magnet: "고Dy NdFeB - 내열성 확보, 희토류 의존도 높음"
-       - 2024 current Rotor Magnet: "저Dy/Dy-free NdFeB - Grain Boundary Diffusion 공법"
-       - 2028 future Rotor Magnet: "Ferrite/희토류프리 - EESM 확산, 원가 30%+ 절감"
-
-   - status: 2024 이전=past, 2024~2025=current, 2026 이후=future`;
-
-    const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const [overviewData, motorBaseData] = await Promise.all([
+      callAiJson({
+        lovableApiKey,
         model: 'google/gemini-2.5-flash',
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요.\n\nmotorSpecs 필수 지침:\n1. 글로벌 모든 완성차의 BEV/HEV/PHEV/MHEV 전체 라인업 포함 (최소 150개)\n2. ★ powertrain 필드: 모든 차종에 반드시 BEV/PHEV/MHEV/HEV 중 하나 기재. "-"는 절대 불가.\n3. ★ motorPosition 필드: BEV 싱글모터→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0 등 반드시 기재.\n4. ★ rangeKm 필드: BEV는 반드시 주행거리(km) 기재. PHEV는 EV모드 거리.\n5. 위 3개 필드가 비어있으면 안 됩니다. 최대한 채워주세요.\n\nroadmap 필수 지침:\n1. PRM은 EV 모터 제품 아키텍처 관점에서 12~20개 항목\n2. TRM은 모터 구성 부품별(Stator Core, Winding, Rotor, Magnet, Cooling, Bearing, Inverter, Resolver, Lamination, Busbar, Housing, Insulation, Sealing 등) 기술 진화를 20~30개 항목으로 상세히 작성` }
+          { role: 'system', content: overviewPrompt },
+          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}` },
         ],
-        response_format: { type: "json_object" },
-        temperature: 0.5,
-        max_tokens: 12000,
+        temperature: 0.4,
+        maxTokens: 9000,
+        retries: 1,
       }),
-    });
+      callAiJson({
+        lovableApiKey,
+        model: 'google/gemini-2.5-pro',
+        messages: [
+          { role: 'system', content: motorSpecsPrompt },
+          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}` },
+        ],
+        temperature: 0.2,
+        maxTokens: 18000,
+        retries: 1,
+      }),
+    ]);
 
-    if (!res.ok) {
-      if (res.status === 429) return new Response(JSON.stringify({ error: '요청 한도 초과. 잠시 후 다시 시도해주세요.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      if (res.status === 402) return new Response(JSON.stringify({ error: '크레딧 부족.' }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      throw new Error(`AI error: ${res.status}`);
-    }
+    const dashboardData: any = {
+      wordCloud: Array.isArray(overviewData?.wordCloud) ? overviewData.wordCloud : [],
+      roadmap: {
+        prm: Array.isArray(overviewData?.roadmap?.prm) ? overviewData.roadmap.prm : [],
+        trm: Array.isArray(overviewData?.roadmap?.trm) ? overviewData.roadmap.trm : [],
+      },
+      motorSpecs: [],
+    };
 
-    const aiData = await res.json();
-    const modelContent = aiData?.choices?.[0]?.message?.content || '{}';
-    const dashboardData = parseJsonFromModel(modelContent);
-    let mergedMotorSpecs = Array.isArray(dashboardData.motorSpecs) ? dashboardData.motorSpecs : [];
+    let mergedMotorSpecs = Array.isArray(motorBaseData?.motorSpecs) ? motorBaseData.motorSpecs : [];
 
     if (mergedMotorSpecs.length < 260) {
       try {
         const existingModels = mergedMotorSpecs.map((s: any) => `${s.oem}::${s.model}`).join(', ');
-        const supplementRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${lovableApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'google/gemini-2.5-flash',
-            messages: [
-              {
-                role: 'system',
-                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "powertrain": "BEV|PHEV|MHEV|HEV",\n      "motorPosition": "P0|P1|P2|P3|P4|P2+P4|P3+P4 등",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "rangeKm": "주행가능거리(km 숫자)",\n      "notable": "주목 기술"\n    }\n  ]\n}\n★★★ 필수 규칙 ★★★\n- powertrain: 반드시 BEV/PHEV/MHEV/HEV 중 하나. "-" 절대 금지.\n- motorPosition: BEV 싱글→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0. "-" 최소화.\n- rangeKm: BEV는 반드시 주행거리 기재(300~700km). PHEV는 EV모드 거리. HEV/MHEV만 "-" 허용.\n- 300개 이상 작성 목표, 공개 검증 불가 값만 '-', '정보 없음' 금지, 중복 금지, 연도 내림차순. 듀얼 모터 토크/출력은 슬래시 구분(예: 300/200).`
-              },
-              {
-                role: 'user',
-                 content: `이미 포함된 차종: ${existingModels}\n\n위 차종을 제외하고 누락된 글로벌 BEV/PHEV/MHEV/HEV 차종을 300개 목표로 최대한 추가해줘. Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, Chery, Great Wall, MG, Vinfast, Tata, Lotus, Lexus, Genesis, Mini, Cupra, Mazda, Subaru 등 모든 OEM 포함.`
-              }
-            ],
-            response_format: { type: 'json_object' },
-            temperature: 0.2,
-            max_tokens: 12000,
-          }),
+        const supplementJson = await callAiJson({
+          lovableApiKey,
+          model: 'google/gemini-2.5-pro',
+          messages: [
+            {
+              role: 'system',
+              content: `누락된 글로벌 EV/HEV/PHEV/MHEV 차종을 보강하라. 반드시 {"motorSpecs":[...]} JSON만 응답.
+- powertrain은 BEV/PHEV/MHEV/HEV 중 하나 필수
+- motorPosition 필수(불가 시에만 '-')
+- rangeKm는 BEV/PHEV 우선 기입
+- 중복 금지, 연도 내림차순`,
+            },
+            {
+              role: 'user',
+              content: `이미 포함된 차종: ${existingModels}\n\n누락된 글로벌 차종을 최대한 추가해줘.`,
+            },
+          ],
+          temperature: 0.2,
+          maxTokens: 12000,
+          retries: 1,
         });
 
-        if (supplementRes.ok) {
-          const supplementData = await supplementRes.json();
-          const supplementContent = supplementData?.choices?.[0]?.message?.content || '{}';
-          const supplementJson = parseJsonFromModel(supplementContent);
+        if (supplementJson) {
           const supplementSpecs = Array.isArray(supplementJson.motorSpecs) ? supplementJson.motorSpecs : [];
           mergedMotorSpecs = [...mergedMotorSpecs, ...supplementSpecs];
         }
@@ -399,7 +483,107 @@ serve(async (req) => {
       }
     }
 
-    dashboardData.motorSpecs = dedupeAndSortMotorSpecs(mergedMotorSpecs);
+    const normalizedBeforeCoverage = dedupeAndSortMotorSpecs(mergedMotorSpecs);
+    const hyundaiGroup2025Count = normalizedBeforeCoverage.filter((spec) =>
+      spec.year === '2025' && /(hyundai|kia|genesis)/i.test(spec.oem)
+    ).length;
+
+    if (hyundaiGroup2025Count < 12) {
+      try {
+        const hyundaiBoost = await callAiJson({
+          lovableApiKey,
+          model: 'google/gemini-2.5-pro',
+          messages: [
+            {
+              role: 'system',
+              content: `2025년 Hyundai/Kia/Genesis EV/HEV/PHEV 라인업을 보강하라.
+응답 형식: {"motorSpecs":[...]} JSON만.
+필수: powertrain, motorPosition, rangeKm(BEV/PHEV 우선), year=2025 중심.`,
+            },
+            {
+              role: 'user',
+              content: '2025년 Hyundai/Kia/Genesis 차종을 가능한 많이 추가해줘. EV 및 HEV/PHEV 모두 포함.',
+            },
+          ],
+          temperature: 0.15,
+          maxTokens: 8000,
+          retries: 1,
+        });
+
+        if (Array.isArray(hyundaiBoost?.motorSpecs)) {
+          mergedMotorSpecs = [...mergedMotorSpecs, ...hyundaiBoost.motorSpecs];
+        }
+      } catch (coverageError) {
+        console.error('Hyundai 2025 coverage boost failed:', coverageError);
+      }
+    }
+
+    let normalizedMotorSpecs = dedupeAndSortMotorSpecs(mergedMotorSpecs);
+
+    const missingCriticalRows = normalizedMotorSpecs
+      .map((spec, index) => ({ index, spec }))
+      .filter(({ spec }) => needsCriticalFieldBackfill(spec));
+
+    if (missingCriticalRows.length > 0) {
+      try {
+        const backfillInput = missingCriticalRows.slice(0, 180).map(({ index, spec }) => ({
+          index,
+          year: spec.year,
+          oem: spec.oem,
+          model: spec.model,
+          powertrain: spec.powertrain,
+          motorPosition: spec.motorPosition,
+          rangeKm: spec.rangeKm,
+          notable: spec.notable,
+        }));
+
+        const backfillJson = await callAiJson({
+          lovableApiKey,
+          model: 'google/gemini-2.5-pro',
+          messages: [
+            {
+              role: 'system',
+              content: `아래 누락 행의 핵심 필드만 보강하라. JSON 형식:
+{
+  "fills": [
+    { "index": 0, "powertrain": "BEV|PHEV|MHEV|HEV|-", "motorPosition": "P0|P1|P2|P3|P4|복합|-", "rangeKm": "숫자|-", "reason": "짧은 근거" }
+  ]
+}
+규칙:
+- 확신 없으면 '-' 유지
+- BEV/PHEV는 가능한 공식 공개 수치 범위로 rangeKm 보강
+- HEV/MHEV는 rangeKm '-' 허용
+- 절대 "정보 없음" 사용 금지`,
+            },
+            {
+              role: 'user',
+              content: JSON.stringify(backfillInput),
+            },
+          ],
+          temperature: 0.1,
+          maxTokens: 10000,
+          retries: 1,
+        });
+
+        const fills = Array.isArray(backfillJson?.fills) ? backfillJson.fills : [];
+        for (const fill of fills) {
+          const idx = typeof fill?.index === 'number' ? fill.index : -1;
+          if (idx < 0 || idx >= normalizedMotorSpecs.length) continue;
+
+          normalizedMotorSpecs[idx] = normalizeMotorSpec({
+            ...normalizedMotorSpecs[idx],
+            powertrain: fill?.powertrain ?? normalizedMotorSpecs[idx].powertrain,
+            motorPosition: fill?.motorPosition ?? normalizedMotorSpecs[idx].motorPosition,
+            rangeKm: fill?.rangeKm ?? normalizedMotorSpecs[idx].rangeKm,
+            notable: normalizedMotorSpecs[idx].notable,
+          });
+        }
+      } catch (backfillError) {
+        console.error('Critical field backfill failed:', backfillError);
+      }
+    }
+
+    dashboardData.motorSpecs = dedupeAndSortMotorSpecs(normalizedMotorSpecs);
     dashboardData.motorSpecsQuality = {
       total: dashboardData.motorSpecs.length,
       missingPowertrain: dashboardData.motorSpecs.filter((s: MotorSpecRow) => s.powertrain === '-').length,
@@ -428,6 +612,18 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error) {
+    if (error instanceof AiRequestError && error.status === 429) {
+      return new Response(JSON.stringify({ error: '요청 한도 초과. 잠시 후 다시 시도해주세요.' }), {
+        status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (error instanceof AiRequestError && error.status === 402) {
+      return new Response(JSON.stringify({ error: '크레딧 부족.' }), {
+        status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     console.error('Error:', error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
