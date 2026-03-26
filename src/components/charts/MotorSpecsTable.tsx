@@ -44,16 +44,14 @@ const columns = [
 ];
 
 const getCellValue = (spec: any, key: string): string => {
-  // Try new field names first, then fall back to legacy
   let val = spec[key];
-  if (!val || val === "정보 없음") {
-    // Legacy field mappings
+  if (val === null || val === undefined || val === "" || val === "정보 없음") {
     if (key === "torqueNm") val = spec.torqueMotor || spec.torqueVehicle;
     if (key === "powerKw") val = spec.powerMotor || spec.powerVehicle;
     if (key === "maxSpeedRpm") val = spec.maxSpeedMotor || spec.maxSpeedVehicle;
   }
-  if (!val || val === "정보 없음") return "-";
-  return val;
+  if (val === null || val === undefined || val === "" || val === "정보 없음") return "-";
+  return String(val);
 };
 
 const formatCell = (key: string, val: string): string => {
