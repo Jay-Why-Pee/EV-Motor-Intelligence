@@ -97,11 +97,32 @@ const sanitizeJson = (s: string) => s.replace(/```json\s*/gi, '').replace(/```/g
 
 const parseJson = (content: string) => {
   const cleaned = sanitizeJson(content);
-  try { return JSON.parse(cleaned.replace(/,\s*([}\]])/g, '$1')); } catch {}
-  const start = cleaned.indexOf('{'), end = cleaned.lastIndexOf('}');
-  if (start >= 0 && end > start) {
-    try { return JSON.parse(cleaned.slice(start, end + 1).replace(/,\s*([}\]])/g, '$1')); } catch {}
+  const fixTrailing = (s: string) => s.replace(/,\s*([}\]])/g, '$1');
+  
+  // Try full content
+  try { return JSON.parse(fixTrailing(cleaned)); } catch {}
+  
+  // Try balanced extraction
+  let depth = 0, inStr = false, esc = false;
+  const s = cleaned.indexOf('{');
+  if (s >= 0) {
+    for (let i = s; i < cleaned.length; i++) {
+      const c = cleaned[i];
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (c === '{') depth++;
+      if (c === '}') { depth--; if (depth === 0) { try { return JSON.parse(fixTrailing(cleaned.slice(s, i + 1))); } catch { break; } } }
+    }
   }
+  
+  // Last resort: first { to last }
+  const end = cleaned.lastIndexOf('}');
+  if (s >= 0 && end > s) {
+    try { return JSON.parse(fixTrailing(cleaned.slice(s, end + 1))); } catch {}
+  }
+  
   throw new Error('JSON parse failed');
 };
 
