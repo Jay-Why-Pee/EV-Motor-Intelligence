@@ -131,10 +131,10 @@ serve(async (req) => {
   ],
   "roadmap": {
     "prm": [
-      { "year": "2024", "category": "PMSM|Non-PMSM|P1|P2|P3|P4|BEV|xHEV", "title": "제목", "description": "설명", "status": "past|current|future" }
+      { "year": "2024", "category": "카테고리", "title": "제목", "description": "설명", "status": "past|current|future" }
     ],
     "trm": [
-      { "year": "2024", "category": "Stator|Rotor|Winding|Magnet|Cooling|Inverter|Housing|Bearing", "title": "제목", "description": "설명", "status": "past|current|future" }
+      { "year": "2024", "category": "카테고리", "title": "제목", "description": "설명", "status": "past|current|future" }
     ]
   }
 }
@@ -146,19 +146,71 @@ serve(async (req) => {
 
 2. motorSpecs: 글로벌 주요 완성차 OEM들의 확인 가능한 모든 BEV/HEV/PHEV/MHEV 차종 정보를 최대한 많이 수집 (최소 150개, 목표 300개).
    - 출시연도(year) 내림차순 정렬.
-   - powertrain: 반드시 BEV, PHEV, MHEV, HEV 중 하나로 표기.
-   - motorPosition: 모터가 장착된 위치를 P1(엔진 앞), P2(엔진-변속기 사이), P3(변속기 출력), P4(차축 직결) 중 해당 값으로 표기. 듀얼 모터면 "P2+P4"처럼 조합 표기. BEV는 대부분 P3 또는 P3+P4. 확인 불가 시 "-".
-   - rangeKm: 공식 발표 주행가능거리(WLTP 또는 EPA 기준, km). 숫자만. 확인 불가 시 "-".
-   - 반드시 실제로 공개된/검증된 스펙만 입력. 확인 불가 시 "-"로 표기 (절대 추측하지 말 것, "정보 없음" 문자열 금지).
+
+   ★★★ 가장 중요한 규칙 — powertrain, motorPosition, rangeKm 필드 ★★★
+   - powertrain: 반드시 BEV, PHEV, MHEV, HEV 중 하나를 기재. 모든 차종에 100% 필수.
+     * 순수 전기차 → BEV
+     * 플러그인 하이브리드 → PHEV
+     * 마일드 하이브리드(48V 등) → MHEV
+     * 풀 하이브리드(비플러그인) → HEV
+     * 이 4개 외의 값이나 "-"는 절대 불가. 반드시 4개 중 하나를 선택하라.
+   - motorPosition: 모터가 장착된 위치. 반드시 아래 규칙을 따를 것:
+     * BEV 싱글모터(후륜) → P3
+     * BEV 싱글모터(전륜) → P3
+     * BEV 듀얼모터(전후) → P3+P4
+     * BEV 트리모터 → P3+P4+P4
+     * PHEV(엔진-변속기 사이 모터) → P2
+     * PHEV(듀얼) → P2+P4
+     * HEV(ISG 타입) → P0 또는 P1
+     * HEV(변속기 내장) → P2
+     * MHEV(48V BSG) → P0
+     * 확인 불가 시에만 "-" 허용. 하지만 위 일반 규칙으로 대부분 추론 가능하므로 최대한 기재할 것.
+   - rangeKm: 공식 발표 주행가능거리(WLTP 또는 EPA 기준, km 숫자만).
+     * BEV는 반드시 주행거리가 있음. 300~700km 범위가 일반적. 반드시 기재.
+     * PHEV는 EV 모드 주행거리(20~100km 범위). 가능하면 기재.
+     * HEV/MHEV는 "-" 가능.
+
    - 단위: 가격은 USD 숫자만, 토크는 Nm 숫자만, 출력은 kW 숫자만, 회전수는 rpm 숫자만, 주행거리는 km 숫자만. 단위 문자열은 절대 포함하지 말 것.
    - 듀얼 모터 차량의 경우: 토크/출력을 슬래시로 구분 표기 (예: "300/200", "150/200"). 단일 모터는 숫자만.
-   - 포함 OEM: Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, SAIC, Changan, GAC Aion, Xiaomi, CATL/Avatr, Chery, Great Wall/ORA, MG/SAIC, Vinfast, Tata, Mahindra, Lotus, McLaren, Ferrari, Lamborghini, Mazda, Subaru, Mitsubishi, Suzuki, Dacia, Skoda, SEAT/Cupra, Opel, Fiat, Jeep, Dodge, RAM, Chrysler, Buick, Cadillac, Lincoln, Acura, Infiniti, Lexus, Genesis, Smart, Mini, Rolls-Royce, Bentley, Maserati, Alfa Romeo, Lancia, DS, Citroen, Peugeot 등.
+   - 확인 불가 값만 "-"로 표기 (절대 추측하지 말 것, "정보 없음" 문자열 금지).
+   - 포함 OEM: Tesla, Hyundai, Kia, BMW, Mercedes-Benz, Audi, Porsche, VW, BYD, NIO, Xpeng, Li Auto, Geely/Zeekr, Toyota, Honda, Nissan, Ford, GM/Chevrolet, Rivian, Lucid, Volvo/Polestar, Stellantis, Renault, SAIC, Changan, GAC Aion, Xiaomi, Chery, Great Wall/ORA, MG/SAIC, Vinfast, Tata, Mahindra, Lotus, Mazda, Subaru, Mitsubishi, Lexus, Genesis, Smart, Mini, Cupra, Skoda 등.
    - 중복 차종은 제거하고 차종명+트림은 명확히 구분.
-   - 최소 150개 이상의 차종을 반드시 포함할 것.
 
 3. roadmap:
-   - PRM(Product Roadmap): PMSM, Non-PMSM, P1~P4 구동 방식, BEV/xHEV별 제품 발전 방향. 2020~2028 범위. 8~15개 항목.
-   - TRM(Technical Roadmap): 모터 부품(Stator, Rotor, Winding, Magnet, Cooling, Inverter 등)별 기술 발전. 2020~2028 범위. 8~15개 항목.
+   - PRM(Product Roadmap): EV 모터 제품 기술 발전 로드맵. 2020~2030 범위. 12~20개 항목.
+     * category: "PMSM", "EESM", "SRM", "Axial Flux", "Wound Rotor", "e-Axle", "Multi-speed", "In-Wheel", "P0/P1 BSG", "P2 Hybrid", "P3 Drive", "P4 AWD", "Dual Motor", "Tri Motor" 등 EV 모터 제품 카테고리.
+     * 구체적인 모터 아키텍처 변화, 구동계 토폴로지 진화, 통합형 e-Axle 트렌드, 멀티모터 구성 등 제품 수준의 기술 흐름.
+     * 예시:
+       - 2020 past: "IPMSM 주류 채택 - V-shape IPM 로터, 분포권 고정자 기반 BEV 주력 모터 표준화"
+       - 2022 past: "Flat Wire(Hairpin) 양산 확대 - 슬롯 충전율 70%+ 달성, 효율 3~5% 향상"
+       - 2024 current: "800V 시스템 표준화 - SiC 인버터 연계, 고속충전 대응 모터 절연 설계"
+       - 2026 future: "Axial Flux 모터 양산 진입 - 고출력밀도 P4/In-wheel 적용 시작"
+       - 2028 future: "EESM(외부 여자 동기모터) 확산 - 희토류 프리 모터, 광범위 효율맵"
+
+   - TRM(Technical Roadmap): EV 모터 핵심 부품별 기술 발전 로드맵. 2020~2030 범위. 20~30개 항목.
+     * category: "Stator Core", "Stator Winding", "Rotor Core", "Rotor Magnet", "Shaft", "Bearing", "Housing", "Cooling System", "Resolver/Sensor", "Busbar", "Terminal", "Insulation", "Lamination", "Inverter/Power Module", "Connector", "Sealing/Gasket", "Balancing" 등 모터를 구성하는 모든 부품 카테고리.
+     * 각 부품별 소재, 공법, 설계 변화를 구체적으로 기술:
+       - Stator Core: 전기강판 두께(0.35→0.25→0.2mm), 자속밀도, 철손 저감, 분할 코어
+       - Stator Winding: 원형→Hairpin→Continuous Hairpin→I-pin, 슬롯 충전율 변화
+       - Rotor Core: IPM V-shape→Delta→Spoke, 브릿지 최적화, 경량화
+       - Rotor Magnet: NdFeB→저Dy NdFeB→Ferrite→희토류프리, Halbach 배열
+       - Cooling: Water Jacket→Direct Oil Cooling→Stator Slot Oil Spray→Hollow Shaft Oil
+       - Insulation: Class H→Class R, 800V 부분방전 대응, Polyimide/Enamel 변화
+       - Bearing: Ball→Ceramic Ball→Magnetic Bearing, 고속 대응
+       - Inverter: Si IGBT→SiC MOSFET→GaN, 모듈 통합, 전력밀도
+       - Resolver: Resolver→TMR→Inductive encoder, 정밀도/비용 트레이드오프
+       - Lamination: 0.35mm NO→0.25mm→0.2mm, 6.5% Si강, Amorphous
+       - Busbar: 구리→알루미늄, 적층 부스바, EMC 최적화
+       - Housing: 주철→알루미늄 다이캐스트→통합형 e-Axle 하우징
+     * 예시 항목:
+       - 2020 past Stator Winding: "Round Wire 분포권 - 슬롯 충전율 45%, 자동화 권선기 기반"
+       - 2022 past Stator Winding: "Hairpin(Flat Wire) 양산 - 슬롯 충전율 65%, 용접 공정 도입"
+       - 2024 current Stator Winding: "Continuous Hairpin - 용접점 50% 감소, I-pin 공법 검증 중"
+       - 2026 future Stator Winding: "I-pin/Segment Conductor - 슬롯 충전율 75%+, 다층 적층"
+       - 2020 past Rotor Magnet: "고Dy NdFeB - 내열성 확보, 희토류 의존도 높음"
+       - 2024 current Rotor Magnet: "저Dy/Dy-free NdFeB - Grain Boundary Diffusion 공법"
+       - 2028 future Rotor Magnet: "Ferrite/희토류프리 - EESM 확산, 원가 30%+ 절감"
+
    - status: 2024 이전=past, 2024~2025=current, 2026 이후=future`;
 
     const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -171,7 +223,7 @@ serve(async (req) => {
         model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요. motorSpecs는 뉴스에 언급된 차종뿐 아니라 글로벌 모든 완성차의 BEV/HEV/PHEV/MHEV 전체 라인업을 포함해주세요. 최소 150개 이상 차종을 목표로 하세요. 각 차종에 powertrain(BEV/PHEV/MHEV/HEV), motorPosition(P1~P4 조합), rangeKm(주행가능거리) 정보를 반드시 포함하세요.` }
+          { role: 'user', content: `=== 최근 뉴스 (${newsData.length}건) ===\n${newsSummary}\n\n위 데이터를 분석하여 대시보드 데이터를 JSON으로 생성해주세요.\n\nmotorSpecs 필수 지침:\n1. 글로벌 모든 완성차의 BEV/HEV/PHEV/MHEV 전체 라인업 포함 (최소 150개)\n2. ★ powertrain 필드: 모든 차종에 반드시 BEV/PHEV/MHEV/HEV 중 하나 기재. "-"는 절대 불가.\n3. ★ motorPosition 필드: BEV 싱글모터→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0 등 반드시 기재.\n4. ★ rangeKm 필드: BEV는 반드시 주행거리(km) 기재. PHEV는 EV모드 거리.\n5. 위 3개 필드가 비어있으면 안 됩니다. 최대한 채워주세요.\n\nroadmap 필수 지침:\n1. PRM은 EV 모터 제품 아키텍처 관점에서 12~20개 항목\n2. TRM은 모터 구성 부품별(Stator Core, Winding, Rotor, Magnet, Cooling, Bearing, Inverter, Resolver, Lamination, Busbar, Housing, Insulation, Sealing 등) 기술 진화를 20~30개 항목으로 상세히 작성` }
         ],
         response_format: { type: "json_object" },
         temperature: 0.5,
@@ -204,7 +256,7 @@ serve(async (req) => {
             messages: [
               {
                 role: 'system',
-                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "powertrain": "BEV|PHEV|MHEV|HEV",\n      "motorPosition": "P1|P2|P3|P4|P2+P4 등",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "rangeKm": "주행가능거리(km 숫자)",\n      "notable": "주목 기술"\n    }\n  ]\n}\n규칙: BEV/HEV/PHEV/MHEV 글로벌 모든 모델을 200개 이상 작성, 공개 검증 불가 값은 '-'로 표기, '정보 없음' 금지, 중복 금지, 연도 내림차순. 듀얼 모터 토크/출력은 슬래시 구분(예: 300/200).`
+                content: `당신은 전기차 파워트레인 데이터 리서처입니다. 아래 JSON 형식으로만 응답하세요.\n{\n  "motorSpecs": [\n    {\n      "year": "출시연도",\n      "oem": "완성차 제조사",\n      "model": "차종명",\n      "powertrain": "BEV|PHEV|MHEV|HEV",\n      "motorPosition": "P0|P1|P2|P3|P4|P2+P4|P3+P4 등",\n      "segment": "세그먼트",\n      "priceUsd": "가격(USD 숫자)",\n      "motorSupplier": "모터 공급사",\n      "torqueNm": "토크(Nm 숫자)",\n      "powerKw": "출력(kW 숫자)",\n      "maxSpeedRpm": "최대속도(rpm 숫자)",\n      "rangeKm": "주행가능거리(km 숫자)",\n      "notable": "주목 기술"\n    }\n  ]\n}\n★★★ 필수 규칙 ★★★\n- powertrain: 반드시 BEV/PHEV/MHEV/HEV 중 하나. "-" 절대 금지.\n- motorPosition: BEV 싱글→P3, BEV 듀얼→P3+P4, PHEV→P2, MHEV→P0. "-" 최소화.\n- rangeKm: BEV는 반드시 주행거리 기재(300~700km). PHEV는 EV모드 거리. HEV/MHEV만 "-" 허용.\n- 200개 이상 작성, 공개 검증 불가 값만 '-', '정보 없음' 금지, 중복 금지, 연도 내림차순. 듀얼 모터 토크/출력은 슬래시 구분(예: 300/200).`
               },
               {
                 role: 'user',
