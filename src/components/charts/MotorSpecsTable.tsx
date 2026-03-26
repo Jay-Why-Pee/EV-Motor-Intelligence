@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Download } from "lucide-react";
 import { ScrollArea } from "../ui/scroll-area";
 
 interface MotorSpec {
@@ -224,6 +224,25 @@ export const MotorSpecsTable = ({ data }: Props) => {
     </div>
   );
 
+  const handleCsvDownload = () => {
+    const csvCols = fullColumns;
+    const header = csvCols.map(c => c.label).join(",");
+    const rows = filtered.map(spec =>
+      csvCols.map(c => {
+        const val = formatCell(c.key, getCellValue(spec, c.key));
+        return `"${val.replace(/"/g, '""')}"`;
+      }).join(",")
+    );
+    const csv = "\uFEFF" + [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ev_motor_specs_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       <Card className="p-4 md:p-6 card-glow">
@@ -232,6 +251,10 @@ export const MotorSpecsTable = ({ data }: Props) => {
             <h3 className="text-lg font-bold mb-1">⚡ EV/HEV Motor Specs Database</h3>
             <p className="text-sm text-muted-foreground">글로벌 전기·하이브리드 차량 탑재 모터 성능 비교 ({filtered.length}개 차종)</p>
           </div>
+          <Button variant="outline" size="sm" onClick={handleCsvDownload} className="gap-2">
+            <Download className="w-4 h-4" />
+            CSV
+          </Button>
         </div>
         <Filters />
         <SpecTable specs={preview} />
@@ -265,7 +288,7 @@ export const MotorSpecsTable = ({ data }: Props) => {
           </DialogHeader>
           <Filters />
           <ScrollArea className="h-[65vh]">
-            <SpecTable specs={filtered} />
+            <SpecTable specs={filtered} cols={fullColumns} />
           </ScrollArea>
         </DialogContent>
       </Dialog>
