@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { ChevronRight } from "lucide-react";
 import { ScrollArea } from "../ui/scroll-area";
 
@@ -17,7 +18,6 @@ interface MotorSpec {
   powerKw: string;
   maxSpeedRpm: string;
   notable: string;
-  // legacy fields for backward compat
   torqueVehicle?: string;
   torqueMotor?: string;
   powerVehicle?: string;
@@ -57,22 +57,23 @@ const getCellValue = (spec: any, key: string): string => {
 const formatCell = (key: string, val: string): string => {
   if (val === "-") return "-";
   if (key === "priceUsd") {
-    const num = parseInt(val.replace(/[^0-9]/g, ""));
+    const num = parseInt(String(val).replace(/[^0-9]/g, ""));
     return isNaN(num) ? val : `$${num.toLocaleString()}`;
   }
-  if (key === "torqueNm" && !val.includes("Nm")) {
-    const num = parseFloat(val.replace(/[^0-9.]/g, ""));
-    return isNaN(num) ? val : `${num} Nm`;
-  }
-  if (key === "powerKw" && !val.includes("kW")) {
-    const num = parseFloat(val.replace(/[^0-9.]/g, ""));
-    return isNaN(num) ? val : `${num} kW`;
-  }
-  if (key === "maxSpeedRpm" && !val.includes("rpm")) {
-    const num = parseInt(val.replace(/[^0-9]/g, ""));
-    return isNaN(num) ? val : `${num.toLocaleString()} rpm`;
+  // For torque, power, maxSpeed — strip units, show numbers only (units are in header)
+  if (key === "torqueNm" || key === "powerKw" || key === "maxSpeedRpm") {
+    // Support slash-separated dual motor values like "300/200"
+    const cleaned = String(val).replace(/\s*(Nm|kW|rpm)\s*/gi, "").trim();
+    return cleaned;
   }
   return val;
+};
+
+const getSpeedNumeric = (spec: MotorSpec): number => {
+  const raw = getCellValue(spec, "maxSpeedRpm");
+  if (raw === "-") return 0;
+  const nums = String(raw).replace(/[^0-9/]/g, "").split("/").map(Number).filter(n => !isNaN(n));
+  return nums.length ? Math.max(...nums) : 0;
 };
 
 const SpecTable = ({ specs }: { specs: MotorSpec[] }) => (
@@ -107,17 +108,69 @@ const SpecTable = ({ specs }: { specs: MotorSpec[] }) => (
 
 export const MotorSpecsTable = ({ data }: Props) => {
   const [expanded, setExpanded] = useState(false);
+  const [yearFilter, setYearFilter] = useState("all");
+  const [oemFilter, setOemFilter] = useState("all");
+  const [speedFilter, setSpeedFilter] = useState("all");
 
   if (!data?.length) return null;
 
-  // Sort by year descending
-  const sorted = [...data].sort((a, b) => {
-    const ya = parseInt(a.year) || 0;
-    const yb = parseInt(b.year) || 0;
-    return yb - ya;
-  });
+  const sorted = useMemo(() =>
+    [...data].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)),
+    [data]
+  );
 
-  const preview = sorted.slice(0, 5);
+  const years = useMemo(() => [...new Set(sorted.map(s => s.year).filter(y => y !== "-"))].sort((a, b) => b.localeCompare(a)), [sorted]);
+  const oems = useMemo(() => [...new Set(sorted.map(s => s.oem).filter(o => o !== "-"))].sort(), [sorted]);
+
+  const filtered = useMemo(() => {
+    return sorted.filter(spec => {
+      if (yearFilter !== "all" && spec.year !== yearFilter) return false;
+      if (oemFilter !== "all" && spec.oem !== oemFilter) return false;
+      if (speedFilter !== "all") {
+        const speed = getSpeedNumeric(spec);
+        if (speedFilter === "low" && speed > 10000) return false;
+        if (speedFilter === "mid" && (speed <= 10000 || speed > 16000)) return false;
+        if (speedFilter === "high" && speed <= 16000) return false;
+      }
+      return true;
+    });
+  }, [sorted, yearFilter, oemFilter, speedFilter]);
+
+  const preview = filtered.slice(0, 5);
+
+  const Filters = () => (
+    <div className="flex flex-wrap gap-3 mb-4">
+      <Select value={yearFilter} onValueChange={setYearFilter}>
+        <SelectTrigger className="w-[130px] h-9 text-sm">
+          <SelectValue placeholder="출시년도" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">전체 연도</SelectItem>
+          {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <Select value={oemFilter} onValueChange={setOemFilter}>
+        <SelectTrigger className="w-[160px] h-9 text-sm">
+          <SelectValue placeholder="OEM" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">전체 OEM</SelectItem>
+          {oems.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <Select value={speedFilter} onValueChange={setSpeedFilter}>
+        <SelectTrigger className="w-[170px] h-9 text-sm">
+          <SelectValue placeholder="최대속도" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">전체 속도</SelectItem>
+          <SelectItem value="low">~10,000 rpm</SelectItem>
+          <SelectItem value="mid">10,001~16,000 rpm</SelectItem>
+          <SelectItem value="high">16,001 rpm~</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
 
   return (
     <>
@@ -125,14 +178,15 @@ export const MotorSpecsTable = ({ data }: Props) => {
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold mb-1">⚡ EV/HEV Motor Specs Database</h3>
-            <p className="text-sm text-muted-foreground">글로벌 전기·하이브리드 차량 탑재 모터 성능 비교</p>
+            <p className="text-sm text-muted-foreground">글로벌 전기·하이브리드 차량 탑재 모터 성능 비교 ({filtered.length}개 차종)</p>
           </div>
         </div>
+        <Filters />
         <SpecTable specs={preview} />
-        {sorted.length > 5 && (
+        {filtered.length > 5 && (
           <div className="flex justify-center mt-4">
             <Button variant="outline" onClick={() => setExpanded(true)} className="gap-2">
-              더 보기 ({sorted.length}개 차종)
+              더 보기 ({filtered.length}개 차종)
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -144,8 +198,9 @@ export const MotorSpecsTable = ({ data }: Props) => {
           <DialogHeader>
             <DialogTitle className="text-xl">⚡ EV/HEV Motor Specs Database</DialogTitle>
           </DialogHeader>
-          <ScrollArea className="h-[70vh]">
-            <SpecTable specs={sorted} />
+          <Filters />
+          <ScrollArea className="h-[65vh]">
+            <SpecTable specs={filtered} />
           </ScrollArea>
         </DialogContent>
       </Dialog>
