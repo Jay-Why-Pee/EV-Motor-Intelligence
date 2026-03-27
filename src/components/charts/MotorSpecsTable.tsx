@@ -40,7 +40,8 @@ const columns = [
   { key: "powertrain", label: "PT" },
   { key: "motorPosition", label: "위치" },
   { key: "motorSupplier", label: "공급사" },
-  { key: "torqueNm", label: "Nm" },
+  { key: "torqueVehicle", label: "차량Nm" },
+  { key: "torqueMotor", label: "모터Nm" },
   { key: "powerKw", label: "kW" },
   { key: "maxSpeedRpm", label: "rpm" },
   { key: "rangeKm", label: "km" },
@@ -56,7 +57,8 @@ const fullColumns = [
   { key: "segment", label: "Segment" },
   { key: "priceUsd", label: "가격 (USD)" },
   { key: "motorSupplier", label: "모터 공급사" },
-  { key: "torqueNm", label: "토크 (Nm)" },
+  { key: "torqueVehicle", label: "차량 토크 (Nm)" },
+  { key: "torqueMotor", label: "모터 토크 (Nm)" },
   { key: "powerKw", label: "출력 (kW)" },
   { key: "maxSpeedRpm", label: "최대속도 (rpm)" },
   { key: "rangeKm", label: "주행거리 (km)" },
@@ -66,7 +68,8 @@ const fullColumns = [
 const getCellValue = (spec: any, key: string): string => {
   let val = spec[key];
   if (val === null || val === undefined || val === "" || val === "정보 없음") {
-    if (key === "torqueNm") val = spec.torqueMotor || spec.torqueVehicle;
+    if (key === "torqueVehicle") val = spec.torqueVehicle;
+    if (key === "torqueMotor") val = spec.torqueMotor || spec.torqueNm;
     if (key === "powerKw") val = spec.powerMotor || spec.powerVehicle;
     if (key === "maxSpeedRpm") val = spec.maxSpeedMotor || spec.maxSpeedVehicle;
   }
@@ -81,7 +84,7 @@ const formatCell = (key: string, val: string): string => {
     return isNaN(num) ? val : `$${num.toLocaleString()}`;
   }
   // For torque, power, maxSpeed — strip units, show numbers only (units are in header)
-  if (key === "torqueNm" || key === "powerKw" || key === "maxSpeedRpm") {
+  if (key === "torqueVehicle" || key === "torqueMotor" || key === "torqueNm" || key === "powerKw" || key === "maxSpeedRpm") {
     const cleaned = String(val).replace(/\s*(Nm|kW|rpm)\s*/gi, "").trim();
     return cleaned;
   }
