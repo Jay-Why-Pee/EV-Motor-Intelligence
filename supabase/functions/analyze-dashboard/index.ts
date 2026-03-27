@@ -307,7 +307,8 @@ status: 2024이전 past, 2024-2025 current, 2026+ future.`;
       callAi(apiKey, 'google/gemini-2.5-flash', MOTOR_BATCH_PROMPT(3, oemBatches[2]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 8000, 0.1),
     ]);
 
-    console.log(`Batch 2: ${batch2?.motorSpecs?.length || 0}, Batch 3: ${batch3?.motorSpecs?.length || 0}`);
+    console.log(`Batch 2 raw keys: ${batch2 ? Object.keys(batch2).join(',') : 'null'}, Batch 3: ${batch3?.motorSpecs?.length || 0}`);
+    console.log(`Batch 2 snippet: ${JSON.stringify(batch2).slice(0, 300)}`);
 
     // Extract motorSpecs from response — handle different key names
     const extractSpecs = (resp: any): any[] => {
