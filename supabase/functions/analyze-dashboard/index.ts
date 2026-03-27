@@ -313,15 +313,20 @@ status: 2024이전 past, 2024-2025 current, 2026+ future.`;
     // Extract motorSpecs from response — handle different key names
     const extractSpecs = (resp: any): any[] => {
       if (!resp) return [];
+      if (Array.isArray(resp)) return resp;
       if (Array.isArray(resp.motorSpecs)) return resp.motorSpecs;
       if (Array.isArray(resp.motor_specs)) return resp.motor_specs;
       if (Array.isArray(resp.specs)) return resp.specs;
       if (Array.isArray(resp.vehicles)) return resp.vehicles;
       if (Array.isArray(resp.data)) return resp.data;
-      // If the response itself is an array
-      if (Array.isArray(resp)) return resp;
+      // Check for numeric keys (array-like object)
+      const keys = Object.keys(resp);
+      if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+        console.log(`Array-like object with ${keys.length} numeric keys`);
+        return keys.map(k => resp[k]).filter(v => v && typeof v === 'object');
+      }
       // Look for the first array value in the response
-      for (const key of Object.keys(resp)) {
+      for (const key of keys) {
         if (Array.isArray(resp[key]) && resp[key].length > 0 && typeof resp[key][0] === 'object') {
           console.log(`Found specs under key "${key}" (${resp[key].length} items)`);
           return resp[key];
