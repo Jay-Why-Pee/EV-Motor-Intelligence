@@ -170,17 +170,29 @@ const parseJson = (content: string) => {
 const callAi = async (apiKey: string, model: string, system: string, user: string, maxTokens: number, temp: number, retries = 2): Promise<any> => {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      const body: any = {
+        model, 
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        response_format: { type: 'json_object' }, 
+        temperature: temp,
+      };
+      
+      // For pro/thinking models, use max_completion_tokens with thinking budget
+      if (model.includes('-pro') || model.includes('reasoning')) {
+        body.max_completion_tokens = maxTokens + 8000; // extra room for thinking
+        body.thinking = { type: 'enabled', budget_tokens: 4000 }; // cap thinking
+      } else {
+        body.max_tokens = maxTokens;
+      }
+      
       const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-          response_format: { type: 'json_object' }, temperature: temp, max_tokens: maxTokens,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const body = await res.text();
-        console.error(`AI HTTP ${res.status} (attempt ${attempt}): ${body.slice(0, 500)}`);
+        const respBody = await res.text();
+        console.error(`AI HTTP ${res.status} (attempt ${attempt}): ${respBody.slice(0, 500)}`);
         if (attempt < retries) continue;
         throw new Error(`AI ${res.status}`);
       }
