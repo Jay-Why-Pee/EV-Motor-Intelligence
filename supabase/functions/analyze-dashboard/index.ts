@@ -84,13 +84,29 @@ const normalizeSpec = (raw: any) => {
   };
 };
 
-const dedupeSpecs = (specs: any[]) => {
+// Smart merge: when merging two specs for the same key, prefer non-'-' values
+const mergeSpecs = (newSpec: any, oldSpec: any): any => {
+  const merged = { ...oldSpec };
+  for (const key of Object.keys(newSpec)) {
+    if (newSpec[key] !== '-' && newSpec[key] !== '') {
+      merged[key] = newSpec[key];
+    }
+  }
+  return merged;
+};
+
+const dedupeAndMergeSpecs = (specs: any[]) => {
   const map = new Map<string, any>();
   for (const raw of specs) {
     const s = normalizeSpec(raw);
     if (s.oem === '-' || s.model === '-') continue;
     const key = `${s.oem.toLowerCase()}::${s.model.toLowerCase()}::${s.powertrain}`;
-    if (!map.has(key)) map.set(key, s);
+    if (map.has(key)) {
+      // Smart merge: keep non-'-' values from both
+      map.set(key, mergeSpecs(s, map.get(key)));
+    } else {
+      map.set(key, s);
+    }
   }
   return [...map.values()].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
 };
@@ -101,10 +117,8 @@ const parseJson = (content: string) => {
   const cleaned = sanitizeJson(content);
   const fixTrailing = (s: string) => s.replace(/,\s*([}\]])/g, '$1');
   
-  // Try full content
   try { return JSON.parse(fixTrailing(cleaned)); } catch {}
   
-  // Try balanced extraction
   let depth = 0, inStr = false, esc = false;
   const s = cleaned.indexOf('{');
   if (s >= 0) {
@@ -119,20 +133,17 @@ const parseJson = (content: string) => {
     }
   }
   
-  // Last resort: first { to last }
   const end = cleaned.lastIndexOf('}');
   if (s >= 0 && end > s) {
     try { return JSON.parse(fixTrailing(cleaned.slice(s, end + 1))); } catch {}
   }
 
-  // Handle truncated JSON: try to repair by closing open brackets
+  // Repair truncated JSON
   if (s >= 0) {
     let repaired = cleaned.slice(s);
-    // Find last complete object in an array (last '}')
     const lastCloseBrace = repaired.lastIndexOf('}');
     if (lastCloseBrace > 0) {
       repaired = repaired.slice(0, lastCloseBrace + 1);
-      // Count unclosed brackets
       let openBraces = 0, openBrackets = 0;
       let inS = false, isEsc = false;
       for (const ch of repaired) {
@@ -147,9 +158,8 @@ const parseJson = (content: string) => {
       }
       repaired += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
       try { 
-        const result = JSON.parse(fixTrailing(repaired));
         console.warn('Repaired truncated JSON successfully');
-        return result;
+        return JSON.parse(fixTrailing(repaired));
       } catch {}
     }
   }
@@ -160,17 +170,29 @@ const parseJson = (content: string) => {
 const callAi = async (apiKey: string, model: string, system: string, user: string, maxTokens: number, temp: number, retries = 2): Promise<any> => {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      const body: any = {
+        model, 
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        response_format: { type: 'json_object' }, 
+        temperature: temp,
+      };
+      
+      // For pro/thinking models, use max_completion_tokens with thinking budget
+      if (model.includes('-pro') || model.includes('reasoning')) {
+        body.max_completion_tokens = maxTokens + 8000; // extra room for thinking
+        body.thinking = { type: 'enabled', budget_tokens: 4000 }; // cap thinking
+      } else {
+        body.max_tokens = maxTokens;
+      }
+      
       const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-          response_format: { type: 'json_object' }, temperature: temp, max_tokens: maxTokens,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const body = await res.text();
-        console.error(`AI HTTP ${res.status} (attempt ${attempt}): ${body.slice(0, 500)}`);
+        const respBody = await res.text();
+        console.error(`AI HTTP ${res.status} (attempt ${attempt}): ${respBody.slice(0, 500)}`);
         if (attempt < retries) continue;
         throw new Error(`AI ${res.status}`);
       }
@@ -178,14 +200,14 @@ const callAi = async (apiKey: string, model: string, system: string, user: strin
       const text = data?.choices?.[0]?.message?.content;
       const finishReason = data?.choices?.[0]?.finish_reason;
       if (!text) {
-        console.error(`Empty AI response (attempt ${attempt}), finish_reason: ${finishReason}`);
+        console.error(`Empty AI response (attempt ${attempt}), finish: ${finishReason}`);
         if (attempt < retries) continue;
         throw new Error('Empty AI response');
       }
       if (finishReason === 'length') {
-        console.warn(`AI response truncated (attempt ${attempt}), trying with fewer tokens...`);
+        console.warn(`AI response truncated (attempt ${attempt})`);
       }
-      console.log(`AI response (attempt ${attempt}): ${text.length} chars, finish: ${finishReason}`);
+      console.log(`AI ok (attempt ${attempt}): ${text.length} chars, finish: ${finishReason}`);
       return parseJson(text);
     } catch (e) {
       if (attempt < retries && (e as Error).message?.includes('parse')) {
@@ -196,6 +218,24 @@ const callAi = async (apiKey: string, model: string, system: string, user: strin
     }
   }
 };
+
+const MOTOR_BATCH_PROMPT = (batchIdx: number, oemFocus: string) => `글로벌 EV/HEV 파워트레인 데이터 전문가. JSON으로 답해라.
+{"motorSpecs":[{"year":"","oem":"","model":"","powertrain":"BEV|PHEV|MHEV|HEV","motorPosition":"P0~P4","segment":"","priceUsd":"","motorSupplier":"","torqueVehicle":"","torqueMotor":"","powerKw":"","maxSpeedRpm":"","rangeKm":"","notable":""}]}
+
+규칙:
+- 정확히 20개 차종. ${oemFocus}
+- powertrain: BEV/PHEV/MHEV/HEV 중 택1. 필수.
+- motorPosition: BEV싱글→P3, 듀얼→P3+P4, PHEV→P2, MHEV→P0, HEV→P2. 필수.
+- torqueVehicle: 차량 토크(Wheel Torque) Nm. 공식 제조사 스펙시트 기준 수치만 기입.
+- torqueMotor: 모터 단독 토크 Nm. 공식 제조사 스펙시트 기준. 듀얼 모터는 앞/뒤 슬래시(예: 255/350).
+- powerKw: 모터 출력 kW. 시스템 최대 출력. 듀얼이면 합산.
+- maxSpeedRpm: 구동 모터 최대 회전수 rpm. 제조사 공식 스펙시트 기준만. OEM이 비공개인 경우 반드시 "-".
+- rangeKm: BEV는 WLTP/EPA km. HEV/MHEV는 반드시 "-".
+- motorSupplier: 모터 제조사/공급사. 자체 생산이면 해당 OEM명.
+- priceUsd: 미국 기준 MSRP USD. 미판매 시 "-".
+- notable: 핵심 기술 특징 10자 이내.
+- 모르는 수치는 반드시 "-". "정보 없음" 금지.
+- 실제 양산/출시된 차종만. 컨셉카 제외.`;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -216,7 +256,6 @@ serve(async (req) => {
     const apiKey = Deno.env.get('LOVABLE_API_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Fetch news
     const { data: newsData } = await supabase.from('news').select('*').order('date', { ascending: false }).limit(60);
     if (!newsData?.length) {
       return new Response(JSON.stringify({ error: 'No news data' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -224,11 +263,13 @@ serve(async (req) => {
 
     const newsBrief = newsData.map(a => `[${a.category?.join(',')}] ${a.title_kr} (${a.source}, ${a.date})`).join('\n');
 
-    // Fetch existing motor specs to merge with
+    // Fetch existing specs for smart merge
     const { data: existingRow } = await supabase.from('market_analysis').select('content').eq('type', 'dashboard_v2').maybeSingle();
     const existingSpecs: any[] = (existingRow?.content as any)?.motorSpecs || [];
 
-    // 1) Overview (wordcloud + roadmap) - fast call
+    console.log(`Starting. Existing specs: ${existingSpecs.length}, news: ${newsData.length}`);
+
+    // 1) Overview (wordcloud + roadmap) — flash is fine for this
     const overviewPrompt = `EV 모터 기술 애널리스트. JSON만 답해라.
 {
   "wordCloud": [{"text":"키워드","value":1}],
@@ -242,35 +283,43 @@ PRM 20개 이상: 모터 아키텍처(IPMSM→EESM→Axial Flux), 800V, 멀티�
 TRM 35개 이상: Stator Core(NO Steel→Amorphous), Hairpin Winding(I-pin→Continuous), Rotor Magnet(NdFeB→Dy-free→Ferrite), Cooling(Oil Spray→Direct Slot), SiC MOSFET(Planar→Trench), Resolver→Inductive Encoder, Lamination(0.3mm→0.2mm→0.1mm), Busbar(Cu→Al→Flexible PCB), Housing(Al Cast→CFRP), Insulation(Class H→Class R), Bearing(Steel→Ceramic→Mag), Sealing(Lip→Labyrinth→Mag), Connector(HV Cu→Al), NVH(Skew→Active Noise Cancel), EMC Shielding, Thermal Interface Material, Winding End-Turn 최적화 등. 2024~2035년 범위.
 status: 2024이전 past, 2024-2025 current, 2026+ future.`;
 
-    // 2) Motor specs - incremental update (compact format, 50 models)
-    const motorPrompt = `글로벌 EV/HEV 파워트레인 데이터 리서처. JSON으로 답해라.
-{"motorSpecs":[{"year":"","oem":"","model":"","powertrain":"BEV|PHEV|MHEV|HEV","motorPosition":"P0~P4","segment":"","motorSupplier":"","torqueVehicle":"차량토크Nm","torqueMotor":"모터토크Nm","powerKw":"","rangeKm":"","notable":""}]}
+    // 2) Motor specs — 3 batches of 20, using pro model for accuracy
+    const oemBatches = [
+      '2024-2025 Hyundai/Kia/Genesis 중심: IONIQ 5 N, IONIQ 5, IONIQ 6, EV3, EV5, EV6, EV6 GT, EV9, Kona Electric, Niro EV, GV60, GV70 Electrified, G80 Electrified, Tucson HEV, Santa Fe HEV, Sorento HEV, Sportage HEV, K8 HEV, K5 HEV, Grandeur HEV.',
+      '2024-2026 Tesla/BMW/Mercedes/VW/Audi/Porsche 중심: Model 3, Model Y, Model S, Cybertruck, iX, i4, i5, iX1, EQS, EQE, EQA, EQB, ID.4, ID.7, ID.Buzz, Q6 e-tron, Macan Electric, Taycan.',
+      '2024-2026 Toyota/BYD/Rivian/Lucid/GM/Ford/Volvo/Polestar/Nissan/Honda 중심: bZ4X, bZ3, Seal, Atto 3, Han EV, R1T, R1S, Air, Lyriq, Blazer EV, Equinox EV, Mustang Mach-E, F-150 Lightning, EX30, EX90, Polestar 2, Ariya, Prologue.',
+    ];
 
-규칙:
-- 50~60개 차종. 2024~2026 글로벌 주요 EV/HEV/PHEV 차종.
-- powertrain 필수(BEV/PHEV/MHEV/HEV 중 택1).
-- motorPosition 필수(BEV싱글→P3, 듀얼→P3+P4, PHEV→P2, MHEV→P0, HEV→P2).
-- torqueVehicle: 차량 토크(Wheel Torque) Nm. 공식 스펙시트 기준. 불가시 "-".
-- torqueMotor: 모터 단독 토크 Nm. 공식 스펙시트 기준. 불가시 "-". 듀얼 모터는 앞/뒤 슬래시(예: 255/350).
-- rangeKm: BEV는 WLTP/EPA 수치. HEV/MHEV는 "-".
-- 2025 Hyundai/Kia/Genesis 필수: IONIQ 5 N, IONIQ 5, IONIQ 6, EV3, EV5, EV6, EV6 GT, EV9, EV9 GT, Kona Electric, Niro EV, GV60, Electrified GV70, Electrified G80, Tucson HEV, Santa Fe HEV, Sorento HEV/PHEV, Sportage HEV/PHEV
-- Tesla, BMW, Mercedes, VW, Toyota, BYD 등 글로벌 OEM도 포함.
-- "정보 없음" 금지. 불가시 "-"만. notable은 10자 이내로 간결하게.`;
-
-    console.log('Starting AI calls...');
-
-    // Run both in parallel
-    const [overviewData, motorData] = await Promise.all([
+    // Run overview + first motor batch in parallel
+    const [overviewData, batch1] = await Promise.all([
       callAi(apiKey, 'google/gemini-2.5-flash', overviewPrompt, `최근 뉴스 ${newsData.length}건:\n${newsBrief}`, 8000, 0.4),
-      callAi(apiKey, 'google/gemini-2.5-flash', motorPrompt, `최근 뉴스 참고:\n${newsBrief.slice(0, 2000)}`, 12000, 0.15),
+      callAi(apiKey, 'google/gemini-2.5-flash', MOTOR_BATCH_PROMPT(1, oemBatches[0]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 8000, 0.1),
     ]);
 
-    console.log('AI calls complete');
+    console.log(`Overview done. Batch 1: ${batch1?.motorSpecs?.length || 0} specs`);
 
-    // Merge new specs with existing
-    const newSpecs = Array.isArray(motorData?.motorSpecs) ? motorData.motorSpecs : [];
-    const allSpecs = [...newSpecs, ...existingSpecs];
-    const finalSpecs = dedupeSpecs(allSpecs).slice(0, 300);
+    // Run batch 2 and 3 in parallel
+    const [batch2, batch3] = await Promise.all([
+      callAi(apiKey, 'google/gemini-2.5-flash', MOTOR_BATCH_PROMPT(2, oemBatches[1]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 8000, 0.1),
+      callAi(apiKey, 'google/gemini-2.5-flash', MOTOR_BATCH_PROMPT(3, oemBatches[2]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 8000, 0.1),
+    ]);
+
+    console.log(`Batch 2: ${batch2?.motorSpecs?.length || 0}, Batch 3: ${batch3?.motorSpecs?.length || 0}`);
+
+    // Merge all new specs, then smart-merge with existing
+    const allNewSpecs = [
+      ...(Array.isArray(batch1?.motorSpecs) ? batch1.motorSpecs : []),
+      ...(Array.isArray(batch2?.motorSpecs) ? batch2.motorSpecs : []),
+      ...(Array.isArray(batch3?.motorSpecs) ? batch3.motorSpecs : []),
+    ];
+    
+    // Put new specs first so they take priority, but mergeSpecs preserves non-'-' from old
+    const combined = [...allNewSpecs, ...existingSpecs];
+    const finalSpecs = dedupeAndMergeSpecs(combined).slice(0, 300);
+
+    // Count quality metrics
+    const filled = (field: string) => finalSpecs.filter((s: any) => s[field] && s[field] !== '-').length;
+    console.log(`Quality: torqueVehicle=${filled('torqueVehicle')}, torqueMotor=${filled('torqueMotor')}, torqueNm=${filled('torqueNm')}, maxSpeedRpm=${filled('maxSpeedRpm')}, motorSupplier=${filled('motorSupplier')}, powerKw=${filled('powerKw')}`);
 
     const dashboard = {
       wordCloud: Array.isArray(overviewData?.wordCloud) ? overviewData.wordCloud : [],
@@ -281,7 +330,6 @@ status: 2024이전 past, 2024-2025 current, 2026+ future.`;
       motorSpecs: finalSpecs,
     };
 
-    // Upsert
     const { data: existing } = await supabase.from('market_analysis').select('id').eq('type', 'dashboard_v2').maybeSingle();
     if (existing) {
       await supabase.from('market_analysis').update({
@@ -293,9 +341,15 @@ status: 2024이전 past, 2024-2025 current, 2026+ future.`;
       });
     }
 
-    console.log(`Done: ${finalSpecs.length} specs, ${dashboard.roadmap.prm.length} PRM, ${dashboard.roadmap.trm.length} TRM`);
+    console.log(`Done: ${finalSpecs.length} specs, ${dashboard.roadmap.prm.length} PRM, ${dashboard.roadmap.trm.length} TRM, ${dashboard.wordCloud.length} keywords`);
 
-    return new Response(JSON.stringify({ success: true, specs: finalSpecs.length }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      specs: finalSpecs.length,
+      newSpecs: allNewSpecs.length,
+      prm: dashboard.roadmap.prm.length,
+      trm: dashboard.roadmap.trm.length,
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error) {
