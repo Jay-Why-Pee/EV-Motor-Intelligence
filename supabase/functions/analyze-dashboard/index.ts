@@ -65,6 +65,9 @@ const extractRange = (raw: any): string => {
 
 const normalizeSpec = (raw: any) => {
   const pt = normalizePowertrain(raw);
+  const torqueVehicle = normalizeField(raw?.torqueVehicle || raw?.wheelTorque || raw?.vehicleTorque);
+  const torqueMotor = normalizeField(raw?.torqueMotor || raw?.motorTorque);
+  const torqueNm = normalizeField(raw?.torqueNm || raw?.torque);
   return {
     year: normalizeField(raw?.year || raw?.launchYear),
     oem: normalizeField(raw?.oem || raw?.brand || raw?.manufacturer),
@@ -72,15 +75,15 @@ const normalizeSpec = (raw: any) => {
     powertrain: pt,
     motorPosition: normalizeMotorPosition(raw, pt),
     segment: normalizeField(raw?.segment),
-    priceUsd: normalizeField(raw?.priceUsd),
-    motorSupplier: normalizeField(raw?.motorSupplier),
-    torqueNm: normalizeField(raw?.torqueNm),
-    torqueVehicle: normalizeField(raw?.torqueVehicle || raw?.wheelTorque || raw?.vehicleTorque),
-    torqueMotor: normalizeField(raw?.torqueMotor || raw?.motorTorque),
-    powerKw: normalizeField(raw?.powerKw),
-    maxSpeedRpm: normalizeField(raw?.maxSpeedRpm),
+    priceUsd: normalizeField(raw?.priceUsd || raw?.price_usd || raw?.price),
+    motorSupplier: normalizeField(raw?.motorSupplier || raw?.motor_supplier || raw?.supplier),
+    torqueNm: torqueNm !== '-' ? torqueNm : (torqueMotor !== '-' ? torqueMotor : torqueVehicle),
+    torqueVehicle: torqueVehicle !== '-' ? torqueVehicle : torqueNm,
+    torqueMotor: torqueMotor !== '-' ? torqueMotor : torqueNm,
+    powerKw: normalizeField(raw?.powerKw || raw?.power_kw || raw?.power),
+    maxSpeedRpm: normalizeField(raw?.maxSpeedRpm || raw?.max_speed_rpm || raw?.maxSpeed),
     rangeKm: extractRange(raw),
-    notable: normalizeField(raw?.notable),
+    notable: normalizeField(raw?.notable || raw?.technology || raw?.tech),
   };
 };
 
