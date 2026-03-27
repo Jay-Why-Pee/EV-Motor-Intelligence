@@ -293,15 +293,15 @@ status: 2024이전 past, 2024-2025 current, 2026+ future.`;
     // Run overview + first motor batch in parallel
     const [overviewData, batch1] = await Promise.all([
       callAi(apiKey, 'google/gemini-2.5-flash', overviewPrompt, `최근 뉴스 ${newsData.length}건:\n${newsBrief}`, 8000, 0.4),
-      callAi(apiKey, 'google/gemini-2.5-pro', MOTOR_BATCH_PROMPT(1, oemBatches[0]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 6000, 0.1),
+      callAi(apiKey, 'google/gemini-2.5-flash', MOTOR_BATCH_PROMPT(1, oemBatches[0]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 8000, 0.1),
     ]);
 
     console.log(`Overview done. Batch 1: ${batch1?.motorSpecs?.length || 0} specs`);
 
     // Run batch 2 and 3 in parallel
     const [batch2, batch3] = await Promise.all([
-      callAi(apiKey, 'google/gemini-2.5-pro', MOTOR_BATCH_PROMPT(2, oemBatches[1]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 6000, 0.1),
-      callAi(apiKey, 'google/gemini-2.5-pro', MOTOR_BATCH_PROMPT(3, oemBatches[2]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 6000, 0.1),
+      callAi(apiKey, 'google/gemini-2.5-flash', MOTOR_BATCH_PROMPT(2, oemBatches[1]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 8000, 0.1),
+      callAi(apiKey, 'google/gemini-2.5-flash', MOTOR_BATCH_PROMPT(3, oemBatches[2]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 8000, 0.1),
     ]);
 
     console.log(`Batch 2: ${batch2?.motorSpecs?.length || 0}, Batch 3: ${batch3?.motorSpecs?.length || 0}`);
