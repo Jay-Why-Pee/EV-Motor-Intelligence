@@ -306,11 +306,31 @@ status: 2024이전 past, 2024-2025 current, 2026+ future.`;
 
     console.log(`Batch 2: ${batch2?.motorSpecs?.length || 0}, Batch 3: ${batch3?.motorSpecs?.length || 0}`);
 
+    // Extract motorSpecs from response — handle different key names
+    const extractSpecs = (resp: any): any[] => {
+      if (!resp) return [];
+      if (Array.isArray(resp.motorSpecs)) return resp.motorSpecs;
+      if (Array.isArray(resp.motor_specs)) return resp.motor_specs;
+      if (Array.isArray(resp.specs)) return resp.specs;
+      if (Array.isArray(resp.vehicles)) return resp.vehicles;
+      if (Array.isArray(resp.data)) return resp.data;
+      // If the response itself is an array
+      if (Array.isArray(resp)) return resp;
+      // Look for the first array value in the response
+      for (const key of Object.keys(resp)) {
+        if (Array.isArray(resp[key]) && resp[key].length > 0 && typeof resp[key][0] === 'object') {
+          console.log(`Found specs under key "${key}" (${resp[key].length} items)`);
+          return resp[key];
+        }
+      }
+      return [];
+    };
+
     // Merge all new specs, then smart-merge with existing
     const allNewSpecs = [
-      ...(Array.isArray(batch1?.motorSpecs) ? batch1.motorSpecs : []),
-      ...(Array.isArray(batch2?.motorSpecs) ? batch2.motorSpecs : []),
-      ...(Array.isArray(batch3?.motorSpecs) ? batch3.motorSpecs : []),
+      ...extractSpecs(batch1),
+      ...extractSpecs(batch2),
+      ...extractSpecs(batch3),
     ];
     
     // Put new specs first so they take priority, but mergeSpecs preserves non-'-' from old
