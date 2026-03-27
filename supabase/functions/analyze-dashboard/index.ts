@@ -65,6 +65,9 @@ const extractRange = (raw: any): string => {
 
 const normalizeSpec = (raw: any) => {
   const pt = normalizePowertrain(raw);
+  const torqueVehicle = normalizeField(raw?.torqueVehicle || raw?.wheelTorque || raw?.vehicleTorque);
+  const torqueMotor = normalizeField(raw?.torqueMotor || raw?.motorTorque);
+  const torqueNm = normalizeField(raw?.torqueNm || raw?.torque);
   return {
     year: normalizeField(raw?.year || raw?.launchYear),
     oem: normalizeField(raw?.oem || raw?.brand || raw?.manufacturer),
@@ -72,15 +75,15 @@ const normalizeSpec = (raw: any) => {
     powertrain: pt,
     motorPosition: normalizeMotorPosition(raw, pt),
     segment: normalizeField(raw?.segment),
-    priceUsd: normalizeField(raw?.priceUsd),
-    motorSupplier: normalizeField(raw?.motorSupplier),
-    torqueNm: normalizeField(raw?.torqueNm),
-    torqueVehicle: normalizeField(raw?.torqueVehicle || raw?.wheelTorque || raw?.vehicleTorque),
-    torqueMotor: normalizeField(raw?.torqueMotor || raw?.motorTorque),
-    powerKw: normalizeField(raw?.powerKw),
-    maxSpeedRpm: normalizeField(raw?.maxSpeedRpm),
+    priceUsd: normalizeField(raw?.priceUsd || raw?.price_usd || raw?.price),
+    motorSupplier: normalizeField(raw?.motorSupplier || raw?.motor_supplier || raw?.supplier),
+    torqueNm: torqueNm !== '-' ? torqueNm : (torqueMotor !== '-' ? torqueMotor : torqueVehicle),
+    torqueVehicle: torqueVehicle !== '-' ? torqueVehicle : torqueNm,
+    torqueMotor: torqueMotor !== '-' ? torqueMotor : torqueNm,
+    powerKw: normalizeField(raw?.powerKw || raw?.power_kw || raw?.power),
+    maxSpeedRpm: normalizeField(raw?.maxSpeedRpm || raw?.max_speed_rpm || raw?.maxSpeed),
     rangeKm: extractRange(raw),
-    notable: normalizeField(raw?.notable),
+    notable: normalizeField(raw?.notable || raw?.technology || raw?.tech),
   };
 };
 
@@ -304,13 +307,39 @@ status: 2024이전 past, 2024-2025 current, 2026+ future.`;
       callAi(apiKey, 'google/gemini-2.5-flash', MOTOR_BATCH_PROMPT(3, oemBatches[2]), `최근 뉴스 참고:\n${newsBrief.slice(0, 1500)}`, 8000, 0.1),
     ]);
 
-    console.log(`Batch 2: ${batch2?.motorSpecs?.length || 0}, Batch 3: ${batch3?.motorSpecs?.length || 0}`);
+    console.log(`Batch 2 raw keys: ${batch2 ? Object.keys(batch2).join(',') : 'null'}, Batch 3: ${batch3?.motorSpecs?.length || 0}`);
+    console.log(`Batch 2 snippet: ${JSON.stringify(batch2).slice(0, 300)}`);
+
+    // Extract motorSpecs from response — handle different key names
+    const extractSpecs = (resp: any): any[] => {
+      if (!resp) return [];
+      if (Array.isArray(resp)) return resp;
+      if (Array.isArray(resp.motorSpecs)) return resp.motorSpecs;
+      if (Array.isArray(resp.motor_specs)) return resp.motor_specs;
+      if (Array.isArray(resp.specs)) return resp.specs;
+      if (Array.isArray(resp.vehicles)) return resp.vehicles;
+      if (Array.isArray(resp.data)) return resp.data;
+      // Check for numeric keys (array-like object)
+      const keys = Object.keys(resp);
+      if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+        console.log(`Array-like object with ${keys.length} numeric keys`);
+        return keys.map(k => resp[k]).filter(v => v && typeof v === 'object');
+      }
+      // Look for the first array value in the response
+      for (const key of keys) {
+        if (Array.isArray(resp[key]) && resp[key].length > 0 && typeof resp[key][0] === 'object') {
+          console.log(`Found specs under key "${key}" (${resp[key].length} items)`);
+          return resp[key];
+        }
+      }
+      return [];
+    };
 
     // Merge all new specs, then smart-merge with existing
     const allNewSpecs = [
-      ...(Array.isArray(batch1?.motorSpecs) ? batch1.motorSpecs : []),
-      ...(Array.isArray(batch2?.motorSpecs) ? batch2.motorSpecs : []),
-      ...(Array.isArray(batch3?.motorSpecs) ? batch3.motorSpecs : []),
+      ...extractSpecs(batch1),
+      ...extractSpecs(batch2),
+      ...extractSpecs(batch3),
     ];
     
     // Put new specs first so they take priority, but mergeSpecs preserves non-'-' from old
