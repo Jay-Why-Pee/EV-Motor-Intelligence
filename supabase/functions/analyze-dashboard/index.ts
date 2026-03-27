@@ -75,6 +75,8 @@ const normalizeSpec = (raw: any) => {
     priceUsd: normalizeField(raw?.priceUsd),
     motorSupplier: normalizeField(raw?.motorSupplier),
     torqueNm: normalizeField(raw?.torqueNm),
+    torqueVehicle: normalizeField(raw?.torqueVehicle || raw?.wheelTorque || raw?.vehicleTorque),
+    torqueMotor: normalizeField(raw?.torqueMotor || raw?.motorTorque),
     powerKw: normalizeField(raw?.powerKw),
     maxSpeedRpm: normalizeField(raw?.maxSpeedRpm),
     rangeKm: extractRange(raw),
@@ -242,12 +244,14 @@ status: 2024이전 past, 2024-2025 current, 2026+ future.`;
 
     // 2) Motor specs - incremental update (compact format, 50 models)
     const motorPrompt = `글로벌 EV/HEV 파워트레인 데이터 리서처. JSON으로 답해라.
-{"motorSpecs":[{"year":"","oem":"","model":"","powertrain":"BEV|PHEV|MHEV|HEV","motorPosition":"P0~P4","segment":"","motorSupplier":"","torqueNm":"","powerKw":"","rangeKm":"","notable":""}]}
+{"motorSpecs":[{"year":"","oem":"","model":"","powertrain":"BEV|PHEV|MHEV|HEV","motorPosition":"P0~P4","segment":"","motorSupplier":"","torqueVehicle":"차량토크Nm","torqueMotor":"모터토크Nm","powerKw":"","rangeKm":"","notable":""}]}
 
 규칙:
 - 50~60개 차종. 2024~2026 글로벌 주요 EV/HEV/PHEV 차종.
 - powertrain 필수(BEV/PHEV/MHEV/HEV 중 택1).
 - motorPosition 필수(BEV싱글→P3, 듀얼→P3+P4, PHEV→P2, MHEV→P0, HEV→P2).
+- torqueVehicle: 차량 토크(Wheel Torque) Nm. 공식 스펙시트 기준. 불가시 "-".
+- torqueMotor: 모터 단독 토크 Nm. 공식 스펙시트 기준. 불가시 "-". 듀얼 모터는 앞/뒤 슬래시(예: 255/350).
 - rangeKm: BEV는 WLTP/EPA 수치. HEV/MHEV는 "-".
 - 2025 Hyundai/Kia/Genesis 필수: IONIQ 5 N, IONIQ 5, IONIQ 6, EV3, EV5, EV6, EV6 GT, EV9, EV9 GT, Kona Electric, Niro EV, GV60, Electrified GV70, Electrified G80, Tucson HEV, Santa Fe HEV, Sorento HEV/PHEV, Sportage HEV/PHEV
 - Tesla, BMW, Mercedes, VW, Toyota, BYD 등 글로벌 OEM도 포함.
