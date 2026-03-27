@@ -84,7 +84,7 @@ const formatCell = (key: string, val: string): string => {
     return isNaN(num) ? val : `$${num.toLocaleString()}`;
   }
   // For torque, power, maxSpeed — strip units, show numbers only (units are in header)
-  if (key === "torqueNm" || key === "powerKw" || key === "maxSpeedRpm") {
+  if (key === "torqueVehicle" || key === "torqueMotor" || key === "torqueNm" || key === "powerKw" || key === "maxSpeedRpm") {
     const cleaned = String(val).replace(/\s*(Nm|kW|rpm)\s*/gi, "").trim();
     return cleaned;
   }
