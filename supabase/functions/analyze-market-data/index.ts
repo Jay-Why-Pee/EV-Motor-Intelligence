@@ -139,15 +139,35 @@ KPI는 정확히 4개. marketSize는 2020~2028년. regionalShare는 5개 지역.
       `뉴스 ${newsData.length}건:\n\n${newsSummary}\n\n기존 특허 제목 (중복 방지): ${existingPatentTitles || '없음'}`
     );
 
-    // Merge and trim papers
-    const newPapers = researchData.papers || [];
-    const allPapers = [...newPapers, ...existingPapers].slice(0, 333);
+    // Non-motor keyword blocklist for filtering accumulated data
+    const nonMotorKeywords = [
+      'battery', 'batteries', '배터리', 'bms', 'cell', 'cathode', 'anode', 'electrolyte',
+      'solid-state', 'semi-solid', '반고체', '전고체', 'lithium',
+      'inverter', '인버터', 'sic', 'gan', 'mosfet', 'power electronics', '전력전자',
+      'dc-dc', 'obc', 'on-board charger',
+      'charging', 'charger', '충전', 'supercharger', 'megawatt', 'v2g', 'v2h',
+      'autonomous', '자율주행', 'adas', 'self-driving', '비상 제동',
+      'fuel cell', '연료전지', 'hydrogen', '수소',
+      'software-defined', 'sdv', 'ota', 'infotainment', '인포테인먼트',
+      'parking', '주차', 'geopolitical', '지정학',
+    ];
+    const isMotorRelated = (item: any): boolean => {
+      const text = JSON.stringify(item).toLowerCase();
+      return !nonMotorKeywords.some(kw => text.includes(kw));
+    };
+
+    // Merge, filter non-motor, and trim
+    const newPapers = (researchData.papers || []).filter(isMotorRelated);
+    const filteredExistingPapers = existingPapers.filter(isMotorRelated);
+    const allPapers = [...newPapers, ...filteredExistingPapers].slice(0, 333);
     const researchInsights = researchData.insights || [];
 
-    // Merge and trim patents
-    const newPatents = patentsData.patents || [];
-    const allPatents = [...newPatents, ...existingPatentsList].slice(0, 333);
+    const newPatents = (patentsData.patents || []).filter(isMotorRelated);
+    const filteredExistingPatents = existingPatentsList.filter(isMotorRelated);
+    const allPatents = [...newPatents, ...filteredExistingPatents].slice(0, 333);
     const patentInsights = patentsData.insights || [];
+
+    console.log(`Filtered: papers ${existingPapers.length}→${filteredExistingPapers.length}, patents ${existingPatentsList.length}→${filteredExistingPatents.length}`);
 
     // Store all data
     const storeData = async (type: string, content: any) => {

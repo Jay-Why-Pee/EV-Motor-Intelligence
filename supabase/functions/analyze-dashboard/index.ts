@@ -76,13 +76,18 @@ const normalizeSpec = (raw: any) => {
     torqueVehicle = '-';
   }
   
-  // If torqueVehicle is suspiciously close to torqueMotor (within 2x), likely wrong
+  // Validate torqueVehicle vs torqueMotor ratio
   if (torqueVehicle !== '-' && torqueMotor !== '-') {
     const tv = parseFloat(torqueVehicle.replace(/[^0-9.]/g, ''));
     const tm = parseFloat(torqueMotor.replace(/[^0-9.]/g, ''));
-    if (tv > 0 && tm > 0 && tv / tm < 2.5) {
-      // Ratio too low for gear reduction, vehicle torque is likely motor torque mislabeled
-      torqueVehicle = '-';
+    if (tv > 0 && tm > 0) {
+      const ratio = tv / tm;
+      // Gear ratio is typically 5~12:1. If ratio < 3 or suspiciously exact (10x, 5x), invalidate.
+      const isExactMultiple = Math.abs(ratio - Math.round(ratio)) < 0.01 && ratio >= 5;
+      if (ratio < 3 || isExactMultiple) {
+        // Likely AI-fabricated (multiplied by round number) or too close
+        torqueVehicle = '-';
+      }
     }
   }
 
