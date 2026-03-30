@@ -229,8 +229,16 @@ const MOTOR_BATCH_PROMPT = (batchIdx: number, oemFocus: string) => `글로벌 EV
 - 정확히 20개 차종. ${oemFocus}
 - powertrain: BEV/PHEV/MHEV/HEV 중 택1. 필수.
 - motorPosition: BEV싱글→P3, 듀얼→P3+P4, PHEV→P2, MHEV→P0, HEV→P2. 필수.
-- torqueVehicle: 차량 토크(Wheel Torque) Nm. 공식 제조사 스펙시트 기준 수치만 기입.
-- torqueMotor: 모터 단독 토크 Nm. 공식 제조사 스펙시트 기준. 듀얼 모터는 앞/뒤 슬래시(예: 255/350).
+
+⚠️ torqueVehicle vs torqueMotor 구분 (매우 중요):
+- torqueVehicle: 바퀴(Wheel)에서의 토크 Nm. = 모터 토크 × 감속비. 제조사 공식 "최대 토크" 또는 "시스템 토크"로 표기된 수치. 일반적으로 모터 토크보다 5~12배 크다.
+  예시: Tesla Model 3 RWD → 약 3,500 Nm (wheel), IONIQ 5 RWD → 약 2,700 Nm (wheel)
+- torqueMotor: 모터 축(Shaft)에서의 단독 토크 Nm. 감속기 전 수치. 듀얼 모터는 앞/뒤 슬래시(예: 255/350).
+  예시: Tesla Model 3 RWD 모터 → 약 340 Nm, IONIQ 5 RWD 모터 → 약 350 Nm
+- ❌ 두 값이 동일할 수 없음! 감속기(7~12:1 기어비)가 있으므로 반드시 다른 값.
+- 제조사가 "최대 토크 350 Nm"라고만 공개한 경우: torqueMotor에 350, torqueVehicle에는 "-" (역산 금지).
+- 제조사가 "wheel torque" 또는 "시스템 토크"로 별도 공개한 경우만 torqueVehicle에 기입.
+
 - powerKw: 모터 출력 kW. 시스템 최대 출력. 듀얼이면 합산.
 - maxSpeedRpm: 구동 모터 최대 회전수 rpm. 제조사 공식 스펙시트 기준만. OEM이 비공개인 경우 반드시 "-".
 - rangeKm: BEV는 WLTP/EPA km. HEV/MHEV는 반드시 "-".

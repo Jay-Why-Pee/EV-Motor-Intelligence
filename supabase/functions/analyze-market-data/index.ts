@@ -91,7 +91,12 @@ KPI는 정확히 4개. marketSize는 2020~2028년. regionalShare는 5개 지역.
     console.log('Generating research data...');
     const existingTitles = existingPapers.slice(0, 50).map((p: any) => p.title).join(', ');
     const researchData = await callAI(
-      `당신은 전기차 모터 기술 연구 전문가입니다. 뉴스에서 언급된 기술 트렌드를 기반으로 관련 연구 논문 정보를 생성하세요.
+      `당신은 전기차 **모터(Motor)** 기술 연구 전문가입니다. 뉴스에서 언급된 기술 트렌드를 기반으로 **모터 기술에 직접 관련된** 연구 논문만 생성하세요.
+
+⚠️ 반드시 모터 기술만 포함:
+- ✅ 포함: IPMSM, EESM, Axial Flux, Hairpin Winding, Rotor/Stator 설계, 모터 냉각, NVH, 모터 토크/출력, 감속기, 모터 제어, 모터 재료(전기강판, 영구자석, Dy-free), 모터 제조공정, 코일 권선, 모터 효율
+- ❌ 제외: 인버터, SiC/GaN 반도체, 배터리, BMS, 충전, V2G, 자율주행, ADAS, 연료전지, 수소, 전력전자, DC-DC 컨버터, OBC, 열관리시스템(모터 냉각 제외)
+
 반드시 다음 JSON 구조로 응답:
 {
   "papers": [
@@ -102,8 +107,9 @@ KPI는 정확히 4개. marketSize는 2020~2028년. regionalShare는 5개 지역.
   ]
 }
 - papers: 5~8개의 NEW 논문 (기존 목록과 중복되지 않게)
-- insights: 전체 연구 동향에 대한 1~5개 핵심 인사이트
-- link는 IEEE, ScienceDirect 등 실제 검색 URL`,
+- insights: 전체 연구 동향에 대한 1~5개 핵심 인사이트 (모터 기술만)
+- link는 IEEE, ScienceDirect 등 실제 검색 URL
+- keywords에 인버터, 배터리, BMS, 충전 등 비모터 키워드 절대 포함 금지`,
       `뉴스 ${newsData.length}건:\n\n${newsSummary}\n\n기존 논문 제목 (중복 방지): ${existingTitles || '없음'}`
     );
 
@@ -111,7 +117,12 @@ KPI는 정확히 4개. marketSize는 2020~2028년. regionalShare는 5개 지역.
     console.log('Generating patents data...');
     const existingPatentTitles = existingPatentsList.slice(0, 50).map((p: any) => p.title).join(', ');
     const patentsData = await callAI(
-      `당신은 전기차 모터 특허 분석 전문가입니다. 뉴스에서 언급된 기업과 기술을 기반으로 특허 정보를 생성하세요.
+      `당신은 전기차 **모터(Motor)** 특허 분석 전문가입니다. 뉴스에서 언급된 기업과 기술을 기반으로 **모터 기술에 직접 관련된** 특허만 생성하세요.
+
+⚠️ 반드시 모터 기술만 포함:
+- ✅ 포함: IPMSM, EESM, Axial Flux, Hairpin Winding, Rotor/Stator 설계, 모터 냉각, NVH, 모터 토크/출력, 감속기, 모터 제어, 모터 재료(전기강판, 영구자석, Dy-free), 모터 제조공정, 코일 권선, 모터 효율
+- ❌ 제외: 인버터, SiC/GaN 반도체, 배터리, BMS, 충전, V2G, 자율주행, ADAS, 연료전지, 수소, 전력전자, DC-DC 컨버터, OBC, 열관리시스템(모터 냉각 제외)
+
 반드시 다음 JSON 구조로 응답:
 {
   "patents": [
@@ -122,8 +133,9 @@ KPI는 정확히 4개. marketSize는 2020~2028년. regionalShare는 5개 지역.
   ]
 }
 - patents: 5~8개의 NEW 특허 (기존과 중복 방지)
-- insights: 전체 특허 동향에 대한 1~5개 핵심 인사이트
-- link는 Google Patents 검색 URL`,
+- insights: 전체 특허 동향에 대한 1~5개 핵심 인사이트 (모터 기술만)
+- link는 Google Patents 검색 URL
+- technicalField에 인버터, 배터리, BMS 등 비모터 분야 절대 포함 금지`,
       `뉴스 ${newsData.length}건:\n\n${newsSummary}\n\n기존 특허 제목 (중복 방지): ${existingPatentTitles || '없음'}`
     );
 
