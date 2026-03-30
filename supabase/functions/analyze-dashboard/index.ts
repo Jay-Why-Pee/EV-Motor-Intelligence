@@ -65,9 +65,27 @@ const extractRange = (raw: any): string => {
 
 const normalizeSpec = (raw: any) => {
   const pt = normalizePowertrain(raw);
-  const torqueVehicle = normalizeField(raw?.torqueVehicle || raw?.wheelTorque || raw?.vehicleTorque);
-  const torqueMotor = normalizeField(raw?.torqueMotor || raw?.motorTorque);
+  let torqueVehicle = normalizeField(raw?.torqueVehicle || raw?.wheelTorque || raw?.vehicleTorque);
+  let torqueMotor = normalizeField(raw?.torqueMotor || raw?.motorTorque);
   const torqueNm = normalizeField(raw?.torqueNm || raw?.torque);
+  
+  // If torqueVehicle == torqueMotor, they're likely both motor torque (AI error)
+  // Vehicle torque should be 5-12x motor torque due to gear ratio
+  if (torqueVehicle !== '-' && torqueMotor !== '-' && torqueVehicle === torqueMotor) {
+    // Keep as motor torque, invalidate vehicle torque (needs separate source)
+    torqueVehicle = '-';
+  }
+  
+  // If torqueVehicle is suspiciously close to torqueMotor (within 2x), likely wrong
+  if (torqueVehicle !== '-' && torqueMotor !== '-') {
+    const tv = parseFloat(torqueVehicle.replace(/[^0-9.]/g, ''));
+    const tm = parseFloat(torqueMotor.replace(/[^0-9.]/g, ''));
+    if (tv > 0 && tm > 0 && tv / tm < 2.5) {
+      // Ratio too low for gear reduction, vehicle torque is likely motor torque mislabeled
+      torqueVehicle = '-';
+    }
+  }
+
   return {
     year: normalizeField(raw?.year || raw?.launchYear),
     oem: normalizeField(raw?.oem || raw?.brand || raw?.manufacturer),
@@ -77,8 +95,8 @@ const normalizeSpec = (raw: any) => {
     segment: normalizeField(raw?.segment),
     priceUsd: normalizeField(raw?.priceUsd || raw?.price_usd || raw?.price),
     motorSupplier: normalizeField(raw?.motorSupplier || raw?.motor_supplier || raw?.supplier),
-    torqueNm: torqueNm !== '-' ? torqueNm : (torqueMotor !== '-' ? torqueMotor : torqueVehicle),
-    torqueVehicle: torqueVehicle !== '-' ? torqueVehicle : torqueNm,
+    torqueNm: torqueMotor !== '-' ? torqueMotor : torqueNm,
+    torqueVehicle,
     torqueMotor: torqueMotor !== '-' ? torqueMotor : torqueNm,
     powerKw: normalizeField(raw?.powerKw || raw?.power_kw || raw?.power),
     maxSpeedRpm: normalizeField(raw?.maxSpeedRpm || raw?.max_speed_rpm || raw?.maxSpeed),
