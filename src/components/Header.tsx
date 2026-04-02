@@ -35,7 +35,7 @@ export const Header = () => {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-2xl md:text-4xl font-bold text-gradient mb-2">
-              EV Motor Landscape
+              EV Motor Lens
             </h1>
             <p className="text-muted-foreground text-sm md:text-base">
               실시간 시장 인텔리전스 & 트렌드 모니터링
