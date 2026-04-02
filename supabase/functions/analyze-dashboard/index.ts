@@ -308,8 +308,8 @@ serve(async (req) => {
 {
   "wordCloud": [{"text":"키워드","value":1}],
   "roadmap": {
-    "prm": [{"year":"2024","category":"카테고리","title":"제목","description":"설명","status":"past|current|future","highApplicability":true,"sourceUrl":"https://..."}],
-    "trm": [{"year":"2024","category":"카테고리","title":"제목","description":"설명","status":"past|current|future","highApplicability":true,"sourceUrl":"https://..."}]
+    "prm": [{"year":"2024","category":"카테고리","title":"제목","description":"설명","status":"past|current|future","highApplicability":true,"sources":[{"title":"출처 제목","description":"한줄 설명","url":"https://...또는 빈문자열"}]}],
+    "trm": [{"year":"2024","category":"카테고리","title":"제목","description":"설명","status":"past|current|future","highApplicability":true,"sources":[{"title":"출처 제목","description":"한줄 설명","url":"https://...또는 빈문자열"}]}]
   }
 }
 wordCloud: EV 모터 기술 키워드 20~30개. 영어 기술 용어는 반드시 영어 그대로 출력(예: "Hairpin Winding", "SiC MOSFET", "Axial Flux"). 한글 번역 금지.
@@ -321,7 +321,14 @@ TRM 35개 이상: Stator Core(NO Steel→Amorphous), Hairpin Winding(I-pin→Con
 status: 2024이전 past, 2024-2025 current, 2026+ future.
 
 highApplicability: 전기자동차 모터에 실제 적용 가능성이 높고 업계에서 활발히 개발/양산 중인 기술이면 true. 장기적이거나 실험 단계인 기술은 false.
-sourceUrl: 해당 기술 정보의 출처 URL. IEEE, SAE, OEM 보도자료, 학술 논문, 업계 기사 등 실제 접근 가능한 URL. Google Scholar, ScienceDirect, SAE.org, 제조사 공식 사이트 등에서 검색한 URL. 반드시 실제 존재하는 URL이어야 함.`;
+
+⚠️ sources 규칙 (매우 중요):
+- 각 로드맵 항목마다 sources 배열에 2~4개의 참고 출처를 포함.
+- 각 source는 title(출처 제목), description(한줄 요약), url(원본 링크) 필드 포함.
+- url은 IEEE, SAE, OEM 공식 보도자료, 학술 논문, 신뢰할 수 있는 업계 기사 등의 실제 접근 가능한 URL.
+- ⚠️ 403, 404, 페이월(Paywall), 봇 차단 등으로 실제 접근이 불가능한 URL은 절대 포함하지 마라. 이런 경우 url을 빈 문자열("")로 설정하고 title과 description만 제공.
+- URL을 확신할 수 없으면 url을 ""로 두고 title과 description으로 출처 정보를 전달.
+- AI 내부 지식 기반 정보도 출처로 포함 가능: title에 자료명, description에 핵심 내용 요약, url은 "".`;
 
     // 2) Motor specs — 3 batches of 20, using pro model for accuracy
     const oemBatches = [

@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { Badge } from "../ui/badge";
 import { ScrollArea } from "../ui/scroll-area";
-import { ChevronRight, ExternalLink, Sparkles } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { ChevronRight, ExternalLink, Sparkles, BookOpen, FileText } from "lucide-react";
+
+interface RoadmapSource {
+  title: string;
+  description: string;
+  url?: string;
+}
 
 interface RoadmapItem {
   year: string;
@@ -14,7 +19,8 @@ interface RoadmapItem {
   description: string;
   status: "past" | "current" | "future";
   highApplicability?: boolean;
-  sourceUrl?: string;
+  sourceUrl?: string; // legacy single URL
+  sources?: RoadmapSource[];
 }
 
 interface Props {
@@ -39,18 +45,34 @@ const categoryColors: Record<string, string> = {
   xHEV: "bg-secondary text-secondary-foreground",
 };
 
-const ItemCard = ({ item }: { item: RoadmapItem }) => {
-  const isHighlight = item.highApplicability;
-  const hasSource = item.sourceUrl && item.sourceUrl.startsWith("http");
+/** Normalize sources: support both new `sources[]` and legacy `sourceUrl` */
+const getSources = (item: RoadmapItem): RoadmapSource[] => {
+  if (item.sources && item.sources.length > 0) return item.sources;
+  if (item.sourceUrl && item.sourceUrl.startsWith("http")) {
+    return [{ title: item.title, description: item.description, url: item.sourceUrl }];
+  }
+  return [];
+};
 
-  const content = (
+const ItemCard = ({
+  item,
+  onSelect,
+}: {
+  item: RoadmapItem;
+  onSelect: (item: RoadmapItem) => void;
+}) => {
+  const isHighlight = item.highApplicability;
+  const sources = getSources(item);
+  const hasSources = sources.length > 0;
+
+  return (
     <div
-      className={`p-3 rounded-lg border space-y-1 transition-all ${
+      className={`p-3 rounded-lg border space-y-1 transition-all cursor-pointer hover:border-primary/50 hover:shadow-md ${
         isHighlight
           ? "bg-primary/5 border-primary/30 ring-1 ring-primary/20 shadow-sm"
           : "bg-card/50"
-      } ${hasSource ? "cursor-pointer hover:border-primary/50 hover:shadow-md" : ""}`}
-      onClick={() => hasSource && window.open(item.sourceUrl, "_blank", "noopener")}
+      }`}
+      onClick={() => onSelect(item)}
     >
       <div className="flex items-center gap-2 flex-wrap">
         <Badge
@@ -68,32 +90,118 @@ const ItemCard = ({ item }: { item: RoadmapItem }) => {
             높은 적용성
           </Badge>
         )}
-        {hasSource && (
-          <ExternalLink className="w-3 h-3 text-muted-foreground ml-auto flex-shrink-0" />
+        {hasSources && (
+          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 ml-auto gap-1">
+            <BookOpen className="w-3 h-3" />
+            {sources.length}
+          </Badge>
         )}
       </div>
       <p className={`text-sm font-medium ${isHighlight ? "text-primary" : ""}`}>{item.title}</p>
       <p className="text-xs text-muted-foreground">{item.description}</p>
     </div>
   );
-
-  if (hasSource) {
-    return (
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>{content}</TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs text-xs break-all">
-            🔗 클릭하여 출처 확인
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  return content;
 };
 
-const TimelineView = ({ items, label }: { items: RoadmapItem[]; label: string }) => {
+const RoadmapDetailDialog = ({
+  item,
+  onClose,
+}: {
+  item: RoadmapItem | null;
+  onClose: () => void;
+}) => {
+  if (!item) return null;
+  const sources = getSources(item);
+
+  return (
+    <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-xl flex items-center gap-2">
+            {item.title}
+            {item.highApplicability && (
+              <Badge variant="outline" className="bg-amber-500/15 text-amber-600 border-amber-500/30 gap-1">
+                <Sparkles className="w-3 h-3" />
+                높은 적용성
+              </Badge>
+            )}
+          </DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            {item.description}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-2 space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className={categoryColors[item.category] || "bg-muted text-muted-foreground"}>
+              {item.category}
+            </Badge>
+            <Badge variant="outline" className={statusColors[item.status]}>
+              {item.status === "past" ? "완료" : item.status === "current" ? "진행중" : "예정"}
+            </Badge>
+            <span className="text-sm text-muted-foreground">{item.year}</span>
+          </div>
+
+          {sources.length > 0 && (
+            <div className="pt-4 border-t border-border">
+              <h4 className="text-sm font-semibold mb-3 text-muted-foreground flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5" />
+                참고 출처 ({sources.length}건)
+              </h4>
+              <div className="space-y-2">
+                {sources.map((src, i) => {
+                  const isValidUrl = src.url && src.url.startsWith("http");
+                  if (isValidUrl) {
+                    return (
+                      <a
+                        key={i}
+                        href={src.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block p-3 rounded-md border border-border hover:border-primary/50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-sm font-medium">{src.title}</span>
+                          <ExternalLink className="w-3.5 h-3.5 shrink-0 text-muted-foreground mt-0.5" />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{src.description}</p>
+                      </a>
+                    );
+                  }
+                  return (
+                    <div
+                      key={i}
+                      className="p-3 rounded-md border border-border bg-muted/30"
+                    >
+                      <span className="text-sm font-medium">{src.title}</span>
+                      <p className="text-xs text-muted-foreground mt-1">{src.description}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {sources.length === 0 && (
+            <div className="pt-4 border-t border-border">
+              <p className="text-sm text-muted-foreground">출처 정보가 없습니다.</p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const TimelineView = ({
+  items,
+  label,
+  onSelectItem,
+}: {
+  items: RoadmapItem[];
+  label: string;
+  onSelectItem: (item: RoadmapItem) => void;
+}) => {
   const years = [...new Set(items.map((i) => i.year))].sort();
 
   return (
@@ -104,7 +212,6 @@ const TimelineView = ({ items, label }: { items: RoadmapItem[]; label: string })
         <div className="space-y-4 pl-10">
           {years.map((year) => {
             const yearItems = items.filter((i) => i.year === year);
-            // Sort: highApplicability items first
             yearItems.sort((a, b) => (b.highApplicability ? 1 : 0) - (a.highApplicability ? 1 : 0));
             return (
               <div key={year} className="relative">
@@ -115,7 +222,7 @@ const TimelineView = ({ items, label }: { items: RoadmapItem[]; label: string })
                   <p className="text-sm font-semibold text-muted-foreground">{year}</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {yearItems.map((item, idx) => (
-                      <ItemCard key={idx} item={item} />
+                      <ItemCard key={idx} item={item} onSelect={onSelectItem} />
                     ))}
                   </div>
                 </div>
@@ -130,6 +237,7 @@ const TimelineView = ({ items, label }: { items: RoadmapItem[]; label: string })
 
 export const RoadmapTimeline = ({ prm, trm }: Props) => {
   const [expanded, setExpanded] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<RoadmapItem | null>(null);
 
   if (!prm?.length && !trm?.length) return null;
 
@@ -150,8 +258,12 @@ export const RoadmapTimeline = ({ prm, trm }: Props) => {
           </p>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {prmPreview.length > 0 && <TimelineView items={prmPreview} label="📦 Product Roadmap (PRM)" />}
-          {trmPreview.length > 0 && <TimelineView items={trmPreview} label="🔧 Technical Roadmap (TRM)" />}
+          {prmPreview.length > 0 && (
+            <TimelineView items={prmPreview} label="📦 Product Roadmap (PRM)" onSelectItem={setSelectedItem} />
+          )}
+          {trmPreview.length > 0 && (
+            <TimelineView items={trmPreview} label="🔧 Technical Roadmap (TRM)" onSelectItem={setSelectedItem} />
+          )}
         </div>
         {((prm?.length || 0) > 4 || (trm?.length || 0) > 4) && (
           <div className="flex justify-center mt-4">
@@ -170,12 +282,18 @@ export const RoadmapTimeline = ({ prm, trm }: Props) => {
           </DialogHeader>
           <ScrollArea className="h-[70vh]">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pr-4">
-              {prm && prm.length > 0 && <TimelineView items={prm} label="📦 Product Roadmap (PRM)" />}
-              {trm && trm.length > 0 && <TimelineView items={trm} label="🔧 Technical Roadmap (TRM)" />}
+              {prm && prm.length > 0 && (
+                <TimelineView items={prm} label="📦 Product Roadmap (PRM)" onSelectItem={setSelectedItem} />
+              )}
+              {trm && trm.length > 0 && (
+                <TimelineView items={trm} label="🔧 Technical Roadmap (TRM)" onSelectItem={setSelectedItem} />
+              )}
             </div>
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      <RoadmapDetailDialog item={selectedItem} onClose={() => setSelectedItem(null)} />
     </>
   );
 };
