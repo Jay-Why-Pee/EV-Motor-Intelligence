@@ -4,7 +4,8 @@ import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Badge } from "../ui/badge";
 import { ScrollArea } from "../ui/scroll-area";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ExternalLink, Sparkles } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 interface RoadmapItem {
   year: string;
@@ -12,6 +13,8 @@ interface RoadmapItem {
   title: string;
   description: string;
   status: "past" | "current" | "future";
+  highApplicability?: boolean;
+  sourceUrl?: string;
 }
 
 interface Props {
@@ -36,18 +39,73 @@ const categoryColors: Record<string, string> = {
   xHEV: "bg-secondary text-secondary-foreground",
 };
 
+const ItemCard = ({ item }: { item: RoadmapItem }) => {
+  const isHighlight = item.highApplicability;
+  const hasSource = item.sourceUrl && item.sourceUrl.startsWith("http");
+
+  const content = (
+    <div
+      className={`p-3 rounded-lg border space-y-1 transition-all ${
+        isHighlight
+          ? "bg-primary/5 border-primary/30 ring-1 ring-primary/20 shadow-sm"
+          : "bg-card/50"
+      } ${hasSource ? "cursor-pointer hover:border-primary/50 hover:shadow-md" : ""}`}
+      onClick={() => hasSource && window.open(item.sourceUrl, "_blank", "noopener")}
+    >
+      <div className="flex items-center gap-2 flex-wrap">
+        <Badge
+          variant="outline"
+          className={categoryColors[item.category] || "bg-muted text-muted-foreground"}
+        >
+          {item.category}
+        </Badge>
+        <Badge variant="outline" className={statusColors[item.status]}>
+          {item.status === "past" ? "완료" : item.status === "current" ? "진행중" : "예정"}
+        </Badge>
+        {isHighlight && (
+          <Badge variant="outline" className="bg-amber-500/15 text-amber-600 border-amber-500/30 gap-1">
+            <Sparkles className="w-3 h-3" />
+            높은 적용성
+          </Badge>
+        )}
+        {hasSource && (
+          <ExternalLink className="w-3 h-3 text-muted-foreground ml-auto flex-shrink-0" />
+        )}
+      </div>
+      <p className={`text-sm font-medium ${isHighlight ? "text-primary" : ""}`}>{item.title}</p>
+      <p className="text-xs text-muted-foreground">{item.description}</p>
+    </div>
+  );
+
+  if (hasSource) {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>{content}</TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-xs break-all">
+            🔗 클릭하여 출처 확인
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return content;
+};
+
 const TimelineView = ({ items, label }: { items: RoadmapItem[]; label: string }) => {
-  const years = [...new Set(items.map(i => i.year))].sort();
+  const years = [...new Set(items.map((i) => i.year))].sort();
 
   return (
     <div className="space-y-4">
       <h4 className="font-semibold text-base">{label}</h4>
       <div className="relative">
-        {/* Vertical line */}
         <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
         <div className="space-y-4 pl-10">
-          {years.map(year => {
-            const yearItems = items.filter(i => i.year === year);
+          {years.map((year) => {
+            const yearItems = items.filter((i) => i.year === year);
+            // Sort: highApplicability items first
+            yearItems.sort((a, b) => (b.highApplicability ? 1 : 0) - (a.highApplicability ? 1 : 0));
             return (
               <div key={year} className="relative">
                 <div className="absolute -left-10 top-1 w-8 h-8 rounded-full bg-card border-2 border-primary flex items-center justify-center text-xs font-bold text-primary">
@@ -57,21 +115,7 @@ const TimelineView = ({ items, label }: { items: RoadmapItem[]; label: string })
                   <p className="text-sm font-semibold text-muted-foreground">{year}</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {yearItems.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3 rounded-lg border bg-card/50 space-y-1"
-                      >
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className={categoryColors[item.category] || "bg-muted text-muted-foreground"}>
-                            {item.category}
-                          </Badge>
-                          <Badge variant="outline" className={statusColors[item.status]}>
-                            {item.status === "past" ? "완료" : item.status === "current" ? "진행중" : "예정"}
-                          </Badge>
-                        </div>
-                        <p className="text-sm font-medium">{item.title}</p>
-                        <p className="text-xs text-muted-foreground">{item.description}</p>
-                      </div>
+                      <ItemCard key={idx} item={item} />
                     ))}
                   </div>
                 </div>
@@ -97,7 +141,13 @@ export const RoadmapTimeline = ({ prm, trm }: Props) => {
       <Card className="p-4 md:p-6 card-glow">
         <div className="mb-4">
           <h3 className="text-lg font-bold mb-1">🗺️ Product & Technical Roadmap</h3>
-          <p className="text-sm text-muted-foreground">EV 모터 제품·기술 로드맵 타임라인</p>
+          <p className="text-sm text-muted-foreground">
+            EV 모터 제품·기술 로드맵 타임라인 —{" "}
+            <span className="inline-flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-amber-500" />
+              <span className="text-amber-600 font-medium">높은 적용성</span> 항목은 양산 적용 가능성이 높은 기술
+            </span>
+          </p>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {prmPreview.length > 0 && <TimelineView items={prmPreview} label="📦 Product Roadmap (PRM)" />}
