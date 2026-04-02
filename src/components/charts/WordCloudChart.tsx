@@ -14,31 +14,30 @@ export const WordCloudChart = ({ data }: Props) => {
   const words = useMemo(() => {
     if (!data?.length) return [];
 
-    const maxVal = Math.max(...data.map(d => d.value));
-    const minVal = Math.min(...data.map(d => d.value));
-    const range = maxVal - minVal || 1;
+    const sorted = [...data].sort((a, b) => b.value - a.value);
+    const count = sorted.length;
 
-    return data
-      .sort((a, b) => b.value - a.value)
-      .map((item, idx) => {
-        const normalized = (item.value - minVal) / range;
-        const fontSize = 14 + normalized * 38; // 14px ~ 52px
-        const colors = [
-          "hsl(var(--primary))",
-          "hsl(var(--chart-1))",
-          "hsl(var(--chart-2))",
-          "hsl(var(--chart-3))",
-          "hsl(var(--chart-4))",
-          "hsl(var(--chart-5))",
-          "hsl(var(--destructive))",
-        ];
-        return {
-          ...item,
-          fontSize,
-          color: colors[idx % colors.length],
-          opacity: 0.6 + normalized * 0.4,
-        };
-      });
+    const colors = [
+      "hsl(var(--primary))",
+      "hsl(var(--chart-1))",
+      "hsl(var(--chart-2))",
+      "hsl(var(--chart-3))",
+      "hsl(var(--chart-4))",
+      "hsl(var(--chart-5))",
+      "hsl(var(--destructive))",
+    ];
+
+    // Use rank-based sizing to guarantee monotonic decrease regardless of value distribution
+    return sorted.map((item, idx) => {
+      const rankRatio = 1 - idx / Math.max(count - 1, 1); // 1.0 (top) → 0.0 (bottom)
+      const fontSize = 16 + rankRatio * 40; // 16px (lowest) → 56px (highest)
+      return {
+        ...item,
+        fontSize,
+        color: colors[idx % colors.length],
+        opacity: 0.55 + rankRatio * 0.45,
+      };
+    });
   }, [data]);
 
   if (!words.length) return null;
