@@ -308,14 +308,20 @@ serve(async (req) => {
 {
   "wordCloud": [{"text":"키워드","value":1}],
   "roadmap": {
-    "prm": [{"year":"2024","category":"카테고리","title":"제목","description":"설명","status":"past|current|future"}],
-    "trm": [{"year":"2024","category":"카테고리","title":"제목","description":"설명","status":"past|current|future"}]
+    "prm": [{"year":"2024","category":"카테고리","title":"제목","description":"설명","status":"past|current|future","highApplicability":true,"sourceUrl":"https://..."}],
+    "trm": [{"year":"2024","category":"카테고리","title":"제목","description":"설명","status":"past|current|future","highApplicability":true,"sourceUrl":"https://..."}]
   }
 }
 wordCloud: EV 모터 기술 키워드 20~30개. 영어 기술 용어는 반드시 영어 그대로 출력(예: "Hairpin Winding", "SiC MOSFET", "Axial Flux"). 한글 번역 금지.
-PRM 20개 이상: 모터 아키텍처(IPMSM→EESM→Axial Flux), 800V, 멀티스피드, X-in-1 통합 등. 2024~2035년 범위.
-TRM 35개 이상: Stator Core(NO Steel→Amorphous), Hairpin Winding(I-pin→Continuous), Rotor Magnet(NdFeB→Dy-free→Ferrite), Cooling(Oil Spray→Direct Slot), SiC MOSFET(Planar→Trench), Resolver→Inductive Encoder, Lamination(0.3mm→0.2mm→0.1mm), Busbar(Cu→Al→Flexible PCB), Housing(Al Cast→CFRP), Insulation(Class H→Class R), Bearing(Steel→Ceramic→Mag), Sealing(Lip→Labyrinth→Mag), Connector(HV Cu→Al), NVH(Skew→Active Noise Cancel), EMC Shielding, Thermal Interface Material, Winding End-Turn 최적화 등. 2024~2035년 범위.
-status: 2024이전 past, 2024-2025 current, 2026+ future.`;
+
+⚠️ PRM/TRM은 전기자동차 **구동 모터(Traction Motor)** 기술에만 집중. 인버터, 배터리, BMS, 충전, 자율주행 등 비모터 기술은 절대 포함 금지.
+
+PRM 20개 이상: 모터 아키텍처(IPMSM→EESM→Axial Flux), 800V 모터 설계, 멀티스피드 감속기, X-in-1 e-Axle 통합, 듀얼/트리플 모터 등. 2024~2035년 범위.
+TRM 35개 이상: Stator Core(NO Steel→Amorphous), Hairpin Winding(I-pin→Continuous), Rotor Magnet(NdFeB→Dy-free→Ferrite), Cooling(Oil Spray→Direct Slot), Resolver→Inductive Encoder, Lamination(0.3mm→0.2mm→0.1mm), Busbar(Cu→Al→Flexible PCB), Housing(Al Cast→CFRP), Insulation(Class H→Class R), Bearing(Steel→Ceramic→Mag), Sealing(Lip→Labyrinth→Mag), Connector(HV Cu→Al), NVH(Skew→Active Noise Cancel), EMC Shielding, Thermal Interface Material, Winding End-Turn 최적화 등. 2024~2035년 범위.
+status: 2024이전 past, 2024-2025 current, 2026+ future.
+
+highApplicability: 전기자동차 모터에 실제 적용 가능성이 높고 업계에서 활발히 개발/양산 중인 기술이면 true. 장기적이거나 실험 단계인 기술은 false.
+sourceUrl: 해당 기술 정보의 출처 URL. IEEE, SAE, OEM 보도자료, 학술 논문, 업계 기사 등 실제 접근 가능한 URL. Google Scholar, ScienceDirect, SAE.org, 제조사 공식 사이트 등에서 검색한 URL. 반드시 실제 존재하는 URL이어야 함.`;
 
     // 2) Motor specs — 3 batches of 20, using pro model for accuracy
     const oemBatches = [
