@@ -83,9 +83,12 @@ const Patents = () => {
             ) : (
               <div className="grid gap-6">
                 {patents.map((patent: any, idx: number) => (
-                  <a key={idx} href={isVerifiedHttpUrl(patent.link, patent.linkVerified) ? patent.link : '#'} target={patent.linkVerified ? "_blank" : undefined} rel="noopener noreferrer"
-                    onClick={(e) => !patent.linkVerified && e.preventDefault()}
-                    className={`block transition-transform ${patent.linkVerified ? 'hover:scale-[1.01]' : 'cursor-default'}`}>
+                  <a key={idx}
+                    href={patent.patentNumber ? `https://www.google.com/search?q=patent+${encodeURIComponent(patent.patentNumber)}` : '#'}
+                    target={patent.patentNumber ? "_blank" : undefined}
+                    rel="noopener noreferrer"
+                    onClick={(e) => !patent.patentNumber && e.preventDefault()}
+                    className={`block transition-transform ${patent.patentNumber ? 'hover:scale-[1.01]' : 'cursor-default'}`}>
                     <Card className="p-6 card-glow cursor-pointer">
                       <div className="space-y-4">
                         <div>
