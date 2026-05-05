@@ -82,21 +82,23 @@ const Patents = () => {
               </Card>
             ) : (
               <div className="grid gap-6">
-                {patents.map((patent: any, idx: number) => (
-                  <a key={idx}
-                    href={patent.patentNumber ? `https://www.google.com/search?q=patent+${encodeURIComponent(patent.patentNumber)}` : '#'}
-                    target={patent.patentNumber ? "_blank" : undefined}
-                    rel="noopener noreferrer"
-                    onClick={(e) => !patent.patentNumber && e.preventDefault()}
-                    className={`block transition-transform ${patent.patentNumber ? 'hover:scale-[1.01]' : 'cursor-default'}`}>
-                    <Card className="p-6 card-glow cursor-pointer">
+                {patents.map((patent: any, idx: number) => {
+                  const hasVerifiedLink = patent.linkVerified && patent.link && /^https?:\/\//i.test(patent.link);
+                  const Wrapper = hasVerifiedLink ? 'a' : 'div';
+                  const wrapperProps = hasVerifiedLink
+                    ? { href: patent.link, target: "_blank", rel: "noopener noreferrer", className: "block transition-transform hover:scale-[1.01]" }
+                    : { className: "block" };
+
+                  return (
+                    <Wrapper key={idx} {...(wrapperProps as any)}>
+                    <Card className="p-6 card-glow">
                       <div className="space-y-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-2 mb-2">
                             <h2 className="text-xl font-semibold">{patent.title}</h2>
-                            {!patent.patentNumber && (
-                              <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
-                                특허번호 없음
+                            {!hasVerifiedLink && (
+                              <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 bg-muted/10">
+                                {patent.linkBlockedReason === 'no_verified_source' ? '원문 링크 미확인' : getLinkBlockLabel(patent)}
                               </Badge>
                             )}
                           </div>
@@ -117,7 +119,9 @@ const Patents = () => {
                         )}
                       </div>
                     </Card>
-                  </a>
+                    </Wrapper>
+                  );
+                })}
                 ))}
               </div>
             )}
