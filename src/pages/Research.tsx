@@ -82,17 +82,22 @@ const Research = () => {
               </Card>
             ) : (
               <div className="grid gap-6">
-                {papers.map((paper: any, idx: number) => (
-                  <a key={idx} href={isVerifiedHttpUrl(paper.link, paper.linkVerified) ? paper.link : '#'} target={paper.linkVerified ? "_blank" : undefined} rel="noopener noreferrer"
-                    onClick={(e) => !paper.linkVerified && e.preventDefault()}
-                    className={`block transition-transform ${paper.linkVerified ? 'hover:scale-[1.01]' : 'cursor-default'}`}>
-                    <Card className="p-6 card-glow cursor-pointer">
+                {papers.map((paper: any, idx: number) => {
+                  const hasVerifiedLink = isVerifiedHttpUrl(paper.link, paper.linkVerified);
+                  const Wrapper = hasVerifiedLink ? 'a' : 'div';
+                  const wrapperProps = hasVerifiedLink
+                    ? { href: paper.link, target: "_blank", rel: "noopener noreferrer", className: "block transition-transform hover:scale-[1.01]" }
+                    : { className: "block" };
+
+                  return (
+                    <Wrapper key={idx} {...(wrapperProps as any)}>
+                    <Card className="p-6 card-glow">
                       <div className="space-y-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-2 mb-2">
                             <h2 className="text-xl font-semibold">{paper.title}</h2>
-                            {!paper.linkVerified && (
-                              <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
+                            {!hasVerifiedLink && (
+                              <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 bg-muted/10">
                                 {getLinkBlockLabel(paper)}
                               </Badge>
                             )}
@@ -113,7 +118,9 @@ const Research = () => {
                         )}
                       </div>
                     </Card>
-                  </a>
+                    </Wrapper>
+                  );
+                })}
                 ))}
               </div>
             )}
