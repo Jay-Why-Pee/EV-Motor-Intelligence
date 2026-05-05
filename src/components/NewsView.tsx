@@ -222,7 +222,7 @@ export const NewsView = () => {
                     <div className="pt-3 border-t border-border space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">참고 기사</p>
                       {insight.sources.map((src, si) => {
-                        const valid = isVerifiedHttpUrl(src.url, src.linkVerified);
+                        const valid = isVerifiedHttpUrl(src.url, src.linkVerified ?? /^https?:\/\//i.test(src.url));
                         return (
                           <a key={si} href={valid ? src.url : '#'} target={valid ? "_blank" : undefined} rel="noopener noreferrer"
                             onClick={e => !valid && e.preventDefault()}
@@ -245,7 +245,7 @@ export const NewsView = () => {
       {/* News Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {displayedNews.map(article => (
-          <a key={article.id} href={isVerifiedHttpUrl(article.url, article.linkVerified) ? article.url : '#'} target={article.linkVerified ? "_blank" : undefined} rel="noopener noreferrer" onClick={(e) => !article.linkVerified && e.preventDefault()} className={`block h-full ${article.linkVerified ? '' : 'cursor-default'}`}>
+          <a key={article.id} href={isVerifiedHttpUrl(article.url, article.linkVerified ?? /^https?:\/\//i.test(article.url)) ? article.url : '#'} target={isVerifiedHttpUrl(article.url, article.linkVerified ?? /^https?:\/\//i.test(article.url)) ? "_blank" : undefined} rel="noopener noreferrer" onClick={(e) => !isVerifiedHttpUrl(article.url, article.linkVerified ?? /^https?:\/\//i.test(article.url)) && e.preventDefault()} className={`block h-full ${isVerifiedHttpUrl(article.url, article.linkVerified ?? /^https?:\/\//i.test(article.url)) ? '' : 'cursor-default'}`}>
             <NewsCard {...article} />
           </a>
         ))}
