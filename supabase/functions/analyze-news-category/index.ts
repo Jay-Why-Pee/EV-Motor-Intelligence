@@ -85,8 +85,8 @@ Deno.serve(async (req) => {
           source: news[i].source,
           date: news[i].date,
           url: news[i].url,
-          linkVerified: news[i].linkVerified ?? /^https?:\/\//i.test(news[i].url),
-          linkBlockedReason: news[i].linkBlockedReason ?? null,
+          linkVerified: news[i].link_verified ?? /^https?:\/\//i.test(news[i].url),
+          linkBlockedReason: news[i].link_blocked_reason ?? null,
         })),
     }));
 
