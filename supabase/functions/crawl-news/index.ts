@@ -291,8 +291,6 @@ Important:
         date: a.date,
         category: a.category,
         source: a.source,
-        link_verified: a.linkVerified ?? true,
-        link_blocked_reason: a.linkBlockedReason ?? null,
       })),
       { onConflict: 'url' }
     );
