@@ -57,10 +57,10 @@ export const NewsView = () => {
       setLoading(true);
       const { data, error } = await supabase.from('news').select('*').order('date', { ascending: false });
       if (error) throw error;
-      setNews(((data || []) as NewsArticle[]).map((article) => ({
+      setNews(((data || []) as any[]).map((article) => ({
         ...article,
-        linkVerified: article.linkVerified ?? /^https?:\/\//i.test(article.url),
-        linkBlockedReason: article.linkBlockedReason ?? null,
+        linkVerified: article.link_verified ?? /^https?:\/\//i.test(article.url),
+        linkBlockedReason: article.link_blocked_reason ?? null,
       })));
     } catch (error) {
       console.error('Error fetching news:', error);

@@ -154,11 +154,17 @@ const normalizeUrl = (raw?: string) => {
   }
 };
 
+const wrapperHosts = ['google.com','www.google.com','news.google.com','bing.com','www.bing.com','yahoo.com','search.yahoo.com','duckduckgo.com','patents.google.com'];
+const isWrapperUrl = (url: string): boolean => { try { const h = new URL(url).hostname.toLowerCase(); return wrapperHosts.some(w => h === w || h.endsWith('.'+w)); } catch { return false; } };
+
 const verifyExternalLink = async (inputUrl?: string, hints: string[] = []) => {
   const original = normalizeUrl(inputUrl);
   if (!original) return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'invalid_url' };
+  if (isWrapperUrl(original)) return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'wrapper_url' };
   try {
     const res = await fetch(original, { headers: { 'User-Agent': DEFAULT_UA, Accept: 'text/html,application/xhtml+xml' }, redirect: 'follow' });
+    const finalUrl = normalizeUrl(res.url || original);
+    if (isWrapperUrl(finalUrl)) return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: 'wrapper_redirect' };
     if (!res.ok) return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: res.status === 404 ? 'not_found' : 'blocked' };
     const html = await res.text();
     const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
@@ -169,7 +175,7 @@ const verifyExternalLink = async (inputUrl?: string, hints: string[] = []) => {
     if (!matched && hints.filter(Boolean).length > 0) {
       return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: 'content_mismatch' };
     }
-    return { url: normalizeUrl(res.url || original), linkVerified: true, linkStatus: res.status, linkBlockedReason: null };
+    return { url: finalUrl, linkVerified: true, linkStatus: res.status, linkBlockedReason: null };
   } catch {
     return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'unreachable' };
   }

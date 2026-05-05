@@ -149,8 +149,8 @@ serve(async (req) => {
           source: newsData[i].source,
           date: newsData[i].date,
           url: newsData[i].url,
-          linkVerified: newsData[i].linkVerified ?? /^https?:\/\//i.test(newsData[i].url),
-          linkBlockedReason: newsData[i].linkBlockedReason ?? null,
+          linkVerified: newsData[i].link_verified ?? /^https?:\/\//i.test(newsData[i].url),
+          linkBlockedReason: newsData[i].link_blocked_reason ?? null,
         }));
 
       return {

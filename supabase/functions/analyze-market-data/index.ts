@@ -45,6 +45,22 @@ const extractVisibleText = (html: string) => html
   .replace(/\s+/g, ' ')
   .trim();
 
+/** Hosts that return wrapper/search/redirect pages — never treat as verified original content */
+const wrapperHosts = [
+  'google.com', 'www.google.com', 'news.google.com',
+  'bing.com', 'www.bing.com',
+  'yahoo.com', 'search.yahoo.com',
+  'duckduckgo.com',
+  'patents.google.com', // blocks COOP/COEP headers
+];
+
+const isWrapperUrl = (url: string): boolean => {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return wrapperHosts.some(w => host === w || host.endsWith('.' + w));
+  } catch { return false; }
+};
+
 const blockedPatterns = [
   /404/i,
   /not found/i,
@@ -65,9 +81,20 @@ const verifyExternalLink = async (inputUrl?: string, titleHints: string[] = []) 
     return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'invalid_url' };
   }
 
+  // Reject wrapper/search/redirect URLs
+  if (isWrapperUrl(original)) {
+    return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'wrapper_url' };
+  }
+
   try {
     const res = await fetchWithTimeout(original, {}, 12000);
     const finalUrl = normalizeUrl(res.url || original);
+
+    // Check if redirected to a wrapper
+    if (isWrapperUrl(finalUrl)) {
+      return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: 'wrapper_redirect' };
+    }
+
     if (!res.ok) {
       return {
         url: '',
@@ -105,7 +132,6 @@ const likelyFakePatentNumber = (value?: string) => {
   if (!normalized) return true;
   if (/^(123456|654321|111111|222222|333333|999999)$/.test(normalized)) return true;
   if (/([0-9])\1{5,}/.test(normalized)) return true;
-  // Real patent numbers have a country prefix (US, EP, CN, JP, KR, WO, DE) followed by digits
   if (!/^(US|EP|CN|JP|KR|WO|DE|FR|GB)\d{4,}/i.test(normalized)) return true;
   return false;
 };
@@ -116,20 +142,32 @@ const verifyPatentEntry = async (patent: any) => {
     return null;
   }
 
-  // Google Patents blocks external fetches (ERR_BLOCKED_BY_RESPONSE).
-  // Instead, trust well-formatted patent numbers and link via Google Search.
-  const searchUrl = `https://www.google.com/search?q=patent+${encodeURIComponent(patentNumber)}`;
+  // Try to verify the AI-provided link first
+  if (patent?.link && /^https?:\/\//i.test(patent.link)) {
+    const verified = await verifyExternalLink(patent.link, [patent.title || '', patentNumber]);
+    if (verified.linkVerified) {
+      return {
+        ...patent,
+        link: verified.url,
+        patentNumber,
+        linkVerified: true,
+        linkStatus: verified.linkStatus,
+        linkBlockedReason: null,
+      };
+    }
+  }
 
+  // If no valid link, keep the patent data but mark link as unverified
   return {
     ...patent,
-    link: searchUrl,
+    link: '',
     patentNumber,
-    patentNumberVerified: true,
-    linkVerified: true,
-    linkStatus: 200,
-    linkBlockedReason: null,
+    linkVerified: false,
+    linkStatus: null,
+    linkBlockedReason: 'no_verified_source',
   };
 };
+
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
