@@ -1,6 +1,7 @@
-import { Calendar, Building2 } from "lucide-react";
+import { Calendar, Building2, ShieldAlert } from "lucide-react";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
+import { getLinkBlockLabel } from "@/lib/linkValidation";
 
 interface NewsCardProps {
   title: string;
@@ -10,9 +11,11 @@ interface NewsCardProps {
   source: string;
   date: string;
   url: string;
+  linkVerified?: boolean;
+  linkBlockedReason?: string | null;
 }
 
-export const NewsCard = ({ title_kr, summary, category, source, date }: NewsCardProps) => {
+export const NewsCard = ({ title_kr, summary, category, source, date, linkVerified, linkBlockedReason }: NewsCardProps) => {
   return (
     <div className="block h-full">
       <Card className="p-5 card-glow group h-full flex flex-col hover:shadow-lg transition-shadow">
@@ -32,14 +35,22 @@ export const NewsCard = ({ title_kr, summary, category, source, date }: NewsCard
           {summary}
         </p>
         
-        <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border">
-          <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground pt-3 border-t border-border">
+          <div className="flex items-center gap-1 min-w-0">
             <Building2 className="w-3 h-3" />
-            <span>{source}</span>
+            <span className="truncate">{source}</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-3 shrink-0">
+            {!linkVerified && (
+              <div className="flex items-center gap-1 text-destructive">
+                <ShieldAlert className="w-3 h-3" />
+                <span>{getLinkBlockLabel({ linkBlockedReason })}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />
             <span>{date}</span>
+            </div>
           </div>
         </div>
       </Card>
