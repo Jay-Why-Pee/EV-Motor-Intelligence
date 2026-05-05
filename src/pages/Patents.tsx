@@ -99,10 +99,6 @@ const Patents = () => {
                                 특허번호 없음
                               </Badge>
                             )}
-                              <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
-                                번호 검증 실패
-                              </Badge>
-                            )}
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-muted-foreground mb-4">
                             {patent.patentNumber && <div className="flex items-center gap-2"><FileText className="w-4 h-4" /><span>{patent.patentNumber}</span></div>}
