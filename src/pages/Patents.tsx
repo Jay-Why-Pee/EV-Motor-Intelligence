@@ -3,14 +3,13 @@ import { Header } from "@/components/Header";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
-import { FileText, Building, Calendar, Globe, Loader2, Brain } from "lucide-react";
+import { Loader2, Brain, ExternalLink, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Badge } from "@/components/ui/badge";
-import { getLinkBlockLabel, isVerifiedHttpUrl } from "@/lib/linkValidation";
+import { Button } from "@/components/ui/button";
 
 const Patents = () => {
-  const [patents, setPatents] = useState<any[]>([]);
   const [insights, setInsights] = useState<any[]>([]);
+  const [searchKeywords, setSearchKeywords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
@@ -25,8 +24,8 @@ const Patents = () => {
 
         if (!error && data?.content) {
           const content = data.content as any;
-          setPatents(content.patents || []);
           setInsights(content.insights || []);
+          setSearchKeywords(content.searchKeywords || []);
           setLastUpdated(data.generated_at);
         }
       } catch (e) {
@@ -45,11 +44,11 @@ const Patents = () => {
       
       <main className="container mx-auto px-4 py-6 md:py-8 max-w-7xl">
         <div className="mb-6">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gradient">특허 분석</h1>
-          <p className="text-muted-foreground">EV 모터 기술 관련 주요 특허 동향 분석 (최대 333개 누적, 매일 자동 업데이트)</p>
+          <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gradient">특허 동향 분석</h1>
+          <p className="text-muted-foreground">EV 모터 기술 관련 특허 동향을 AI가 뉴스 기반으로 분석합니다</p>
           {lastUpdated && (
             <p className="text-xs text-muted-foreground/70 mt-1">
-              마지막 업데이트: {new Date(lastUpdated).toLocaleString('ko-KR')} · 총 {patents.length}건
+              마지막 업데이트: {new Date(lastUpdated).toLocaleString('ko-KR')}
             </p>
           )}
         </div>
@@ -65,7 +64,7 @@ const Patents = () => {
               <div className="mb-8 space-y-4">
                 <div className="flex items-center gap-2">
                   <Brain className="w-5 h-5 text-primary" />
-                  <h2 className="text-xl font-semibold">AI 종합 분석</h2>
+                  <h2 className="text-xl font-semibold">AI 특허 동향 분석</h2>
                 </div>
                 {insights.map((insight: any, idx: number) => (
                   <Card key={idx} className="p-5 card-glow border-primary/20">
@@ -76,53 +75,42 @@ const Patents = () => {
               </div>
             )}
 
-            {patents.length === 0 ? (
-              <Card className="p-8 text-center">
-                <p className="text-muted-foreground">아직 생성된 특허 데이터가 없습니다. 뉴스가 수집되면 자동으로 업데이트됩니다.</p>
-              </Card>
-            ) : (
-              <div className="grid gap-6">
-                {patents.map((patent: any, idx: number) => {
-                  const hasVerifiedLink = patent.linkVerified && patent.link && /^https?:\/\//i.test(patent.link);
-                  const Wrapper = hasVerifiedLink ? 'a' : 'div';
-                  const wrapperProps = hasVerifiedLink
-                    ? { href: patent.link, target: "_blank", rel: "noopener noreferrer", className: "block transition-transform hover:scale-[1.01]" }
-                    : { className: "block" };
-
-                  return (
-                    <Wrapper key={idx} {...(wrapperProps as any)}>
-                    <Card className="p-6 card-glow">
-                      <div className="space-y-4">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <h2 className="text-xl font-semibold">{patent.title}</h2>
-                            {!hasVerifiedLink && (
-                              <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 bg-muted/10">
-                                {patent.linkBlockedReason === 'no_verified_source' ? '원문 링크 미확인' : getLinkBlockLabel(patent)}
-                              </Badge>
-                            )}
+            {/* Search Keywords */}
+            {searchKeywords.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Search className="w-5 h-5 text-primary" />
+                  <h2 className="text-xl font-semibold">Google Patents에서 검색하기</h2>
+                </div>
+                <p className="text-sm text-muted-foreground">아래 키워드를 클릭하면 Google Patents에서 관련 특허를 직접 검색할 수 있습니다.</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {searchKeywords.map((item: any, idx: number) => (
+                    <a
+                      key={idx}
+                      href={`https://patents.google.com/?q=${encodeURIComponent(item.keyword)}&oq=${encodeURIComponent(item.keyword)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block transition-transform hover:scale-[1.01]"
+                    >
+                      <Card className="p-4 card-glow hover:border-primary/40 transition-colors h-full">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h3 className="font-semibold text-sm mb-1">{item.keyword}</h3>
+                            <p className="text-xs text-muted-foreground">{item.description}</p>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-muted-foreground mb-4">
-                            {patent.patentNumber && <div className="flex items-center gap-2"><FileText className="w-4 h-4" /><span>{patent.patentNumber}</span></div>}
-                            {patent.applicant && <div className="flex items-center gap-2"><Building className="w-4 h-4" /><span>{patent.applicant}</span></div>}
-                            {patent.filingDate && <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>{patent.filingDate}</span></div>}
-                            {patent.country && <div className="flex items-center gap-2"><Globe className="w-4 h-4" /><span>{patent.country}</span></div>}
-                          </div>
+                          <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
                         </div>
-                        <p className="text-foreground">{patent.summary}</p>
-                        {patent.technicalField && (
-                          <div className="flex flex-wrap gap-2">
-                            {patent.technicalField.map((field: string, fi: number) => (
-                              <span key={fi} className="px-3 py-1 bg-secondary/10 text-secondary rounded-full text-sm">{field}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </Card>
-                    </Wrapper>
-                  );
-                })}
+                      </Card>
+                    </a>
+                  ))}
+                </div>
               </div>
+            )}
+
+            {insights.length === 0 && searchKeywords.length === 0 && (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">아직 생성된 특허 분석 데이터가 없습니다. 뉴스가 수집되면 자동으로 업데이트됩니다.</p>
+              </Card>
             )}
           </>
         )}
