@@ -110,6 +110,11 @@ export type Database = {
           created_at: string | null
           date: string
           id: string
+          link_blocked_reason: string | null
+          link_status: number | null
+          link_verified: boolean
+          link_verified_at: string | null
+          resolved_url: string | null
           source: string
           summary: string
           title: string
@@ -122,6 +127,11 @@ export type Database = {
           created_at?: string | null
           date: string
           id?: string
+          link_blocked_reason?: string | null
+          link_status?: number | null
+          link_verified?: boolean
+          link_verified_at?: string | null
+          resolved_url?: string | null
           source: string
           summary: string
           title: string
@@ -134,6 +144,11 @@ export type Database = {
           created_at?: string | null
           date?: string
           id?: string
+          link_blocked_reason?: string | null
+          link_status?: number | null
+          link_verified?: boolean
+          link_verified_at?: string | null
+          resolved_url?: string | null
           source?: string
           summary?: string
           title?: string
