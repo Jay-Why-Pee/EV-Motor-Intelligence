@@ -282,15 +282,30 @@ KPI는 정확히 4개. marketSize는 2020~2028년. regionalShare는 5개 지역.
       return !nonMotorKeywords.some(kw => text.includes(kw));
     };
 
-    // Merge, filter non-motor, and trim
-    const newPapers = (researchData.papers || []).filter(isMotorRelated);
-    const filteredExistingPapers = existingPapers.filter(isMotorRelated);
-    const allPapers = [...newPapers, ...filteredExistingPapers].slice(0, 333);
+    const verifyPaperEntry = async (paper: any) => {
+      const verifiedLink = await verifyExternalLink(paper?.link, [paper?.title || '', paper?.journal || '']);
+      return {
+        ...paper,
+        link: verifiedLink.linkVerified ? verifiedLink.url : '',
+        linkVerified: verifiedLink.linkVerified,
+        linkStatus: verifiedLink.linkStatus,
+        linkBlockedReason: verifiedLink.linkBlockedReason,
+      };
+    };
+
+    // Merge, filter non-motor, validate links, and trim
+    const newPapers = await Promise.all((researchData.papers || []).filter(isMotorRelated).map(verifyPaperEntry));
+    const filteredExistingPapers = await Promise.all(existingPapers.filter(isMotorRelated).map(verifyPaperEntry));
+    const allPapers = [...newPapers, ...filteredExistingPapers]
+      .filter((paper, index, arr) => paper?.title && arr.findIndex((candidate) => candidate.title === paper.title) === index)
+      .slice(0, 333);
     const researchInsights = researchData.insights || [];
 
-    const newPatents = (patentsData.patents || []).filter(isMotorRelated);
-    const filteredExistingPatents = existingPatentsList.filter(isMotorRelated);
-    const allPatents = [...newPatents, ...filteredExistingPatents].slice(0, 333);
+    const newPatents = (await Promise.all((patentsData.patents || []).filter(isMotorRelated).map(verifyPatentEntry))).filter(Boolean);
+    const filteredExistingPatents = (await Promise.all(existingPatentsList.filter(isMotorRelated).map(verifyPatentEntry))).filter(Boolean);
+    const allPatents = [...newPatents, ...filteredExistingPatents]
+      .filter((patent: any, index: number, arr: any[]) => patent?.patentNumber && arr.findIndex((candidate) => candidate.patentNumber === patent.patentNumber) === index)
+      .slice(0, 333);
     const patentInsights = patentsData.insights || [];
 
     console.log(`Filtered: papers ${existingPapers.length}→${filteredExistingPapers.length}, patents ${existingPatentsList.length}→${filteredExistingPatents.length}`);
