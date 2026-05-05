@@ -5,11 +5,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Badge } from "../ui/badge";
 import { ScrollArea } from "../ui/scroll-area";
 import { ChevronRight, ExternalLink, Sparkles, BookOpen, FileText } from "lucide-react";
+import { getLinkBlockLabel, isVerifiedHttpUrl } from "@/lib/linkValidation";
 
 interface RoadmapSource {
   title: string;
   description: string;
   url?: string;
+  linkVerified?: boolean;
+  linkBlockedReason?: string | null;
 }
 
 interface RoadmapItem {
@@ -150,7 +153,7 @@ const RoadmapDetailDialog = ({
               </h4>
               <div className="space-y-2">
                 {sources.map((src, i) => {
-                  const isValidUrl = src.url && src.url.startsWith("http");
+                  const isValidUrl = isVerifiedHttpUrl(src.url, src.linkVerified);
                   if (isValidUrl) {
                     return (
                       <a
@@ -174,7 +177,7 @@ const RoadmapDetailDialog = ({
                       className="p-3 rounded-md border border-border bg-muted/30"
                     >
                       <span className="text-sm font-medium">{src.title}</span>
-                      <p className="text-xs text-muted-foreground mt-1">{src.description}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{src.description} · {getLinkBlockLabel(src)}</p>
                     </div>
                   );
                 })}
