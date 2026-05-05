@@ -7,6 +7,7 @@ import { Badge } from "./ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, RefreshCw, Brain, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getLinkBlockLabel, isVerifiedHttpUrl } from "@/lib/linkValidation";
 
 type Category = "all" | "Asia" | "Europe" | "North America" | "China" | "GM" | "Ford" | "Mercedes-Benz" | "BMW" | "Volkswagen" | "Honda" | "Hyundai" | "Stellantis" | "Toyota" | "Tesla" | "Nissan" | "Renault" | "BYD" | "Xiaomi" | "Geely" | "Bosch" | "ZF" | "Schaeffler" | "LG Magna" | "Denso" | "Magna" | "Hyundai Mobis" | "AISIN" | "BorgWarner" | "Hitachi Astemo" | "Other";
 
@@ -19,12 +20,14 @@ interface NewsArticle {
   source: string;
   date: string;
   url: string;
+  linkVerified?: boolean;
+  linkBlockedReason?: string | null;
 }
 
 interface CategoryInsight {
   title: string;
   content: string;
-  sources: { title_kr: string; source: string; date: string; url: string }[];
+  sources: { title_kr: string; source: string; date: string; url: string; linkVerified?: boolean; linkBlockedReason?: string | null }[];
 }
 
 export const NewsView = () => {
@@ -54,7 +57,11 @@ export const NewsView = () => {
       setLoading(true);
       const { data, error } = await supabase.from('news').select('*').order('date', { ascending: false });
       if (error) throw error;
-      setNews((data || []) as NewsArticle[]);
+      setNews(((data || []) as NewsArticle[]).map((article) => ({
+        ...article,
+        linkVerified: article.linkVerified ?? /^https?:\/\//i.test(article.url),
+        linkBlockedReason: article.linkBlockedReason ?? null,
+      })));
     } catch (error) {
       console.error('Error fetching news:', error);
     } finally {
@@ -219,14 +226,14 @@ export const NewsView = () => {
                     <div className="pt-3 border-t border-border space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">참고 기사</p>
                       {insight.sources.map((src, si) => {
-                        const valid = src.url?.startsWith('http');
+                        const valid = isVerifiedHttpUrl(src.url, src.linkVerified);
                         return (
                           <a key={si} href={valid ? src.url : '#'} target={valid ? "_blank" : undefined} rel="noopener noreferrer"
                             onClick={e => !valid && e.preventDefault()}
                             className="flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors">
                             {valid && <ExternalLink className="w-3 h-3 shrink-0" />}
                             <span className="line-clamp-1">{src.title_kr}</span>
-                            <span className="shrink-0">— {src.source} ({src.date})</span>
+                            <span className="shrink-0">— {src.source} ({src.date}){!valid ? ` · ${getLinkBlockLabel(src)}` : ''}</span>
                           </a>
                         );
                       })}
@@ -242,7 +249,7 @@ export const NewsView = () => {
       {/* News Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {displayedNews.map(article => (
-          <a key={article.id} href={article.url} target="_blank" rel="noopener noreferrer" className="block h-full">
+          <a key={article.id} href={isVerifiedHttpUrl(article.url, article.linkVerified) ? article.url : '#'} target={isVerifiedHttpUrl(article.url, article.linkVerified) ? "_blank" : undefined} rel="noopener noreferrer" onClick={(e) => !isVerifiedHttpUrl(article.url, article.linkVerified) && e.preventDefault()} className={`block h-full ${isVerifiedHttpUrl(article.url, article.linkVerified) ? '' : 'cursor-default'}`}>
             <NewsCard {...article} />
           </a>
         ))}

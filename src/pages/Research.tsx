@@ -5,6 +5,8 @@ import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { BookOpen, Calendar, Users, Loader2, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
+import { getLinkBlockLabel, isVerifiedHttpUrl } from "@/lib/linkValidation";
 
 const Research = () => {
   const [papers, setPapers] = useState<any[]>([]);
@@ -81,12 +83,20 @@ const Research = () => {
             ) : (
               <div className="grid gap-6">
                 {papers.map((paper: any, idx: number) => (
-                  <a key={idx} href={paper.link} target="_blank" rel="noopener noreferrer"
-                    className="block transition-transform hover:scale-[1.01]">
+                  <a key={idx} href={isVerifiedHttpUrl(paper.link, paper.linkVerified) ? paper.link : '#'} target={paper.linkVerified ? "_blank" : undefined} rel="noopener noreferrer"
+                    onClick={(e) => !paper.linkVerified && e.preventDefault()}
+                    className={`block transition-transform ${paper.linkVerified ? 'hover:scale-[1.01]' : 'cursor-default'}`}>
                     <Card className="p-6 card-glow cursor-pointer">
                       <div className="space-y-4">
                         <div>
-                          <h2 className="text-xl font-semibold mb-2">{paper.title}</h2>
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <h2 className="text-xl font-semibold">{paper.title}</h2>
+                            {!paper.linkVerified && (
+                              <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
+                                {getLinkBlockLabel(paper)}
+                              </Badge>
+                            )}
+                          </div>
                           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
                             {paper.authors && <div className="flex items-center gap-2"><Users className="w-4 h-4" /><span>{paper.authors}</span></div>}
                             {paper.journal && <div className="flex items-center gap-2"><BookOpen className="w-4 h-4" /><span>{paper.journal}</span></div>}

@@ -5,6 +5,8 @@ import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { FileText, Building, Calendar, Globe, Loader2, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
+import { getLinkBlockLabel, isVerifiedHttpUrl } from "@/lib/linkValidation";
 
 const Patents = () => {
   const [patents, setPatents] = useState<any[]>([]);
@@ -81,12 +83,25 @@ const Patents = () => {
             ) : (
               <div className="grid gap-6">
                 {patents.map((patent: any, idx: number) => (
-                  <a key={idx} href={patent.link} target="_blank" rel="noopener noreferrer"
-                    className="block transition-transform hover:scale-[1.01]">
+                  <a key={idx} href={isVerifiedHttpUrl(patent.link, patent.linkVerified) ? patent.link : '#'} target={patent.linkVerified ? "_blank" : undefined} rel="noopener noreferrer"
+                    onClick={(e) => !patent.linkVerified && e.preventDefault()}
+                    className={`block transition-transform ${patent.linkVerified ? 'hover:scale-[1.01]' : 'cursor-default'}`}>
                     <Card className="p-6 card-glow cursor-pointer">
                       <div className="space-y-4">
                         <div>
-                          <h2 className="text-xl font-semibold mb-2">{patent.title}</h2>
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <h2 className="text-xl font-semibold">{patent.title}</h2>
+                            {!patent.linkVerified && (
+                              <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
+                                {getLinkBlockLabel(patent)}
+                              </Badge>
+                            )}
+                            {patent.patentNumberVerified === false && (
+                              <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
+                                번호 검증 실패
+                              </Badge>
+                            )}
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-muted-foreground mb-4">
                             {patent.patentNumber && <div className="flex items-center gap-2"><FileText className="w-4 h-4" /><span>{patent.patentNumber}</span></div>}
                             {patent.applicant && <div className="flex items-center gap-2"><Building className="w-4 h-4" /><span>{patent.applicant}</span></div>}
