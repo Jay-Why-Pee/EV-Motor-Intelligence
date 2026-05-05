@@ -168,26 +168,6 @@ const verifyPatentEntry = async (patent: any) => {
   };
 };
 
-const verifyPatentEntry = async (patent: any) => {
-  const patentNumber = String(patent?.patentNumber || '').trim();
-  if (likelyFakePatentNumber(patentNumber)) {
-    return null;
-  }
-
-  // Google Patents blocks external fetches (ERR_BLOCKED_BY_RESPONSE).
-  // Instead, trust well-formatted patent numbers and link via Google Search.
-  const searchUrl = `https://www.google.com/search?q=patent+${encodeURIComponent(patentNumber)}`;
-
-  return {
-    ...patent,
-    link: searchUrl,
-    patentNumber,
-    patentNumberVerified: true,
-    linkVerified: true,
-    linkStatus: 200,
-    linkBlockedReason: null,
-  };
-};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
