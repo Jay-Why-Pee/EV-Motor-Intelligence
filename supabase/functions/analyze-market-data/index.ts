@@ -309,6 +309,7 @@ KPI는 정확히 4개. marketSize는 2020~2028년. regionalShare는 5개 지역.
     const patentInsights = patentsData.insights || [];
 
     console.log(`Filtered: papers ${existingPapers.length}→${filteredExistingPapers.length}, patents ${existingPatentsList.length}→${filteredExistingPatents.length}`);
+    console.log(`Verified: papers clickable=${allPapers.filter((paper: any) => paper.linkVerified).length}/${allPapers.length}, patents verified=${allPatents.length}`);
 
     // Store all data
     const storeData = async (type: string, content: any) => {
