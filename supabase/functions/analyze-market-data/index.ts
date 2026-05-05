@@ -132,9 +132,40 @@ const likelyFakePatentNumber = (value?: string) => {
   if (!normalized) return true;
   if (/^(123456|654321|111111|222222|333333|999999)$/.test(normalized)) return true;
   if (/([0-9])\1{5,}/.test(normalized)) return true;
-  // Real patent numbers have a country prefix (US, EP, CN, JP, KR, WO, DE) followed by digits
   if (!/^(US|EP|CN|JP|KR|WO|DE|FR|GB)\d{4,}/i.test(normalized)) return true;
   return false;
+};
+
+const verifyPatentEntry = async (patent: any) => {
+  const patentNumber = String(patent?.patentNumber || '').trim();
+  if (likelyFakePatentNumber(patentNumber)) {
+    return null;
+  }
+
+  // Try to verify the AI-provided link first
+  if (patent?.link && /^https?:\/\//i.test(patent.link)) {
+    const verified = await verifyExternalLink(patent.link, [patent.title || '', patentNumber]);
+    if (verified.linkVerified) {
+      return {
+        ...patent,
+        link: verified.url,
+        patentNumber,
+        linkVerified: true,
+        linkStatus: verified.linkStatus,
+        linkBlockedReason: null,
+      };
+    }
+  }
+
+  // If no valid link, keep the patent data but mark link as unverified
+  return {
+    ...patent,
+    link: '',
+    patentNumber,
+    linkVerified: false,
+    linkStatus: null,
+    linkBlockedReason: 'no_verified_source',
+  };
 };
 
 const verifyPatentEntry = async (patent: any) => {
