@@ -139,6 +139,42 @@ const dedupeAndMergeSpecs = (specs: any[]) => {
 
 const sanitizeJson = (s: string) => s.replace(/```json\s*/gi, '').replace(/```/g, '').replace(/\u0000/g, '').trim();
 
+const DEFAULT_UA = 'Mozilla/5.0 (compatible; LovableLinkVerifier/1.0)';
+
+const normalizeUrl = (raw?: string) => {
+  try {
+    let value = (raw || '').trim();
+    if (!value) return '';
+    if (!/^https?:\/\//i.test(value)) value = `https://${value}`;
+    const url = new URL(value);
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return '';
+  }
+};
+
+const verifyExternalLink = async (inputUrl?: string, hints: string[] = []) => {
+  const original = normalizeUrl(inputUrl);
+  if (!original) return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'invalid_url' };
+  try {
+    const res = await fetch(original, { headers: { 'User-Agent': DEFAULT_UA, Accept: 'text/html,application/xhtml+xml' }, redirect: 'follow' });
+    if (!res.ok) return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: res.status === 404 ? 'not_found' : 'blocked' };
+    const html = await res.text();
+    const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+    if (/404|not found|403|forbidden|captcha|subscribe to continue|paywall/i.test(text.slice(0, 4000))) {
+      return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: res.status === 404 ? 'not_found' : 'blocked' };
+    }
+    const matched = hints.filter(Boolean).map((hint) => hint.toLowerCase()).some((hint) => hint.length < 6 || text.includes(hint.slice(0, Math.min(80, hint.length))));
+    if (!matched && hints.filter(Boolean).length > 0) {
+      return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: 'content_mismatch' };
+    }
+    return { url: normalizeUrl(res.url || original), linkVerified: true, linkStatus: res.status, linkBlockedReason: null };
+  } catch {
+    return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'unreachable' };
+  }
+};
+
 const parseJson = (content: string) => {
   const cleaned = sanitizeJson(content);
   const fixTrailing = (s: string) => s.replace(/,\s*([}\]])/g, '$1');
