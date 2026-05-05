@@ -291,6 +291,11 @@ Important:
         date: a.date,
         category: a.category,
         source: a.source,
+        link_verified: a.linkVerified ?? true,
+        link_status: a.linkStatus ?? null,
+        link_blocked_reason: a.linkBlockedReason ?? null,
+        resolved_url: a.url,
+        link_verified_at: new Date().toISOString(),
       })),
       { onConflict: 'url' }
     );
