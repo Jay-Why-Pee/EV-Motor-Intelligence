@@ -45,6 +45,22 @@ const extractVisibleText = (html: string) => html
   .replace(/\s+/g, ' ')
   .trim();
 
+/** Hosts that return wrapper/search/redirect pages — never treat as verified original content */
+const wrapperHosts = [
+  'google.com', 'www.google.com', 'news.google.com',
+  'bing.com', 'www.bing.com',
+  'yahoo.com', 'search.yahoo.com',
+  'duckduckgo.com',
+  'patents.google.com', // blocks COOP/COEP headers
+];
+
+const isWrapperUrl = (url: string): boolean => {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return wrapperHosts.some(w => host === w || host.endsWith('.' + w));
+  } catch { return false; }
+};
+
 const blockedPatterns = [
   /404/i,
   /not found/i,
@@ -65,9 +81,20 @@ const verifyExternalLink = async (inputUrl?: string, titleHints: string[] = []) 
     return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'invalid_url' };
   }
 
+  // Reject wrapper/search/redirect URLs
+  if (isWrapperUrl(original)) {
+    return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'wrapper_url' };
+  }
+
   try {
     const res = await fetchWithTimeout(original, {}, 12000);
     const finalUrl = normalizeUrl(res.url || original);
+
+    // Check if redirected to a wrapper
+    if (isWrapperUrl(finalUrl)) {
+      return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: 'wrapper_redirect' };
+    }
+
     if (!res.ok) {
       return {
         url: '',
