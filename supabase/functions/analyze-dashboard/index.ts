@@ -430,11 +430,31 @@ highApplicability: 전기자동차 모터에 실제 적용 가능성이 높고 �
     const filled = (field: string) => finalSpecs.filter((s: any) => s[field] && s[field] !== '-').length;
     console.log(`Quality: torqueVehicle=${filled('torqueVehicle')}, torqueMotor=${filled('torqueMotor')}, torqueNm=${filled('torqueNm')}, maxSpeedRpm=${filled('maxSpeedRpm')}, motorSupplier=${filled('motorSupplier')}, powerKw=${filled('powerKw')}`);
 
+    const verifyRoadmapItems = async (items: any[] = []) => Promise.all(items.map(async (item) => ({
+      ...item,
+      sources: await Promise.all(((item?.sources || []) as any[]).map(async (source) => {
+        if (!source?.url) {
+          return { ...source, url: '', linkVerified: false, linkStatus: null, linkBlockedReason: source?.description ? 'blocked' : 'invalid_url' };
+        }
+        const verified = await verifyExternalLink(source.url, [source.title || item?.title || '', source.description || '']);
+        return {
+          ...source,
+          url: verified.linkVerified ? verified.url : '',
+          linkVerified: verified.linkVerified,
+          linkStatus: verified.linkStatus,
+          linkBlockedReason: verified.linkBlockedReason,
+        };
+      })),
+    })));
+
+    const verifiedPrm = await verifyRoadmapItems(Array.isArray(overviewData?.roadmap?.prm) ? overviewData.roadmap.prm : []);
+    const verifiedTrm = await verifyRoadmapItems(Array.isArray(overviewData?.roadmap?.trm) ? overviewData.roadmap.trm : []);
+
     const dashboard = {
       wordCloud: Array.isArray(overviewData?.wordCloud) ? overviewData.wordCloud : [],
       roadmap: {
-        prm: Array.isArray(overviewData?.roadmap?.prm) ? overviewData.roadmap.prm : [],
-        trm: Array.isArray(overviewData?.roadmap?.trm) ? overviewData.roadmap.trm : [],
+        prm: verifiedPrm,
+        trm: verifiedTrm,
       },
       motorSpecs: finalSpecs,
     };
