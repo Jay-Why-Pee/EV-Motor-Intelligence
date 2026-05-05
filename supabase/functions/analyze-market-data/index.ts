@@ -6,6 +6,131 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+const DEFAULT_UA = 'Mozilla/5.0 (compatible; LovableLinkVerifier/1.0)';
+
+const normalizeUrl = (raw: string): string => {
+  try {
+    let value = (raw || '').trim();
+    if (!value) return '';
+    if (!/^https?:\/\//i.test(value)) value = `https://${value}`;
+    const url = new URL(value);
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return '';
+  }
+};
+
+const fetchWithTimeout = async (input: string, init: RequestInit = {}, timeoutMs = 10000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, {
+      ...init,
+      redirect: 'follow',
+      headers: { 'User-Agent': DEFAULT_UA, Accept: 'text/html,application/xhtml+xml', ...(init.headers || {}) },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(id);
+  }
+};
+
+const extractVisibleText = (html: string) => html
+  .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+  .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/&nbsp;/g, ' ')
+  .replace(/&amp;/g, '&')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const blockedPatterns = [
+  /404/i,
+  /not found/i,
+  /page not found/i,
+  /403/i,
+  /access denied/i,
+  /forbidden/i,
+  /bot detection/i,
+  /captcha/i,
+  /enable javascript/i,
+  /subscribe to continue/i,
+  /paywall/i,
+];
+
+const verifyExternalLink = async (inputUrl?: string, titleHints: string[] = []) => {
+  const original = normalizeUrl(inputUrl || '');
+  if (!original) {
+    return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'invalid_url' };
+  }
+
+  try {
+    const res = await fetchWithTimeout(original, {}, 12000);
+    const finalUrl = normalizeUrl(res.url || original);
+    if (!res.ok) {
+      return {
+        url: '',
+        linkVerified: false,
+        linkStatus: res.status,
+        linkBlockedReason: res.status === 404 ? 'not_found' : res.status === 403 ? 'blocked' : 'unreachable',
+      };
+    }
+
+    const html = await res.text();
+    const text = extractVisibleText(html).toLowerCase();
+    if (blockedPatterns.some((pattern) => pattern.test(text.slice(0, 4000)))) {
+      return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: res.status === 404 ? 'not_found' : 'blocked' };
+    }
+
+    const normalizedHints = titleHints
+      .map((hint) => hint.toLowerCase().replace(/[^a-z0-9가-힣\s]/gi, ' ').replace(/\s+/g, ' ').trim())
+      .filter((hint) => hint.length >= 6);
+    const contentMatched = normalizedHints.length === 0 || normalizedHints.some((hint) => text.includes(hint.slice(0, Math.min(hint.length, 80))));
+    if (!contentMatched) {
+      return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: 'content_mismatch' };
+    }
+
+    return { url: finalUrl, linkVerified: true, linkStatus: res.status, linkBlockedReason: null };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'timeout' };
+    }
+    return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'unreachable' };
+  }
+};
+
+const likelyFakePatentNumber = (value?: string) => {
+  const normalized = (value || '').replace(/\s+/g, '').toUpperCase();
+  if (!normalized) return true;
+  if (/^(123456|654321|111111|222222|333333|999999)$/.test(normalized)) return true;
+  if (/([0-9])\1{5,}/.test(normalized)) return true;
+  return false;
+};
+
+const verifyPatentEntry = async (patent: any) => {
+  const patentNumber = String(patent?.patentNumber || '').trim();
+  if (likelyFakePatentNumber(patentNumber)) {
+    return null;
+  }
+
+  const directPatentUrl = patentNumber ? `https://patents.google.com/patent/${encodeURIComponent(patentNumber)}` : patent?.link;
+  const verifiedLink = await verifyExternalLink(directPatentUrl, [patent?.title || '', patentNumber]);
+  if (!verifiedLink.linkVerified) {
+    return null;
+  }
+
+  return {
+    ...patent,
+    link: verifiedLink.url,
+    patentNumber,
+    patentNumberVerified: true,
+    linkVerified: true,
+    linkStatus: verifiedLink.linkStatus,
+    linkBlockedReason: null,
+  };
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
