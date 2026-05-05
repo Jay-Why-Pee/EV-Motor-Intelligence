@@ -122,7 +122,6 @@ const Patents = () => {
                     </Wrapper>
                   );
                 })}
-                ))}
               </div>
             )}
           </>
