@@ -1,5 +1,6 @@
 import { LucideIcon } from "lucide-react";
 import { Card } from "./ui/card";
+import { isVerifiedHttpUrl } from "@/lib/linkValidation";
 
 interface KPICardProps {
   title: string;
@@ -9,9 +10,10 @@ interface KPICardProps {
   trend: "up" | "down";
   source?: string;
   sourceUrl?: string;
+  sourceLinkVerified?: boolean;
 }
 
-export const KPICard = ({ title, value, change, icon: Icon, trend, source, sourceUrl }: KPICardProps) => {
+export const KPICard = ({ title, value, change, icon: Icon, trend, source, sourceUrl, sourceLinkVerified }: KPICardProps) => {
   const content = (
     <>
       <div className="flex items-start justify-between mb-3">
@@ -32,7 +34,7 @@ export const KPICard = ({ title, value, change, icon: Icon, trend, source, sourc
     </>
   );
 
-  if (sourceUrl) {
+  if (isVerifiedHttpUrl(sourceUrl, sourceLinkVerified)) {
     return (
       <a 
         href={sourceUrl} 
