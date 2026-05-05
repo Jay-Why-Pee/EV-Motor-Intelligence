@@ -82,7 +82,9 @@ serve(async (req) => {
       return content ? decodeHtml(stripHtml(content)).trim() : '';
     };
 
-    const validateAndFixUrl = async (article: any) => {
+     const isBlockedHtml = (html: string) => /404|not found|page not found|403|access denied|forbidden|captcha|enable javascript|subscribe to continue/i.test(html.slice(0, 4000));
+
+     const validateAndFixUrl = async (article: any) => {
       const original = normalizeUrl(article.url);
       if (!original) return null;
 
@@ -91,10 +93,15 @@ serve(async (req) => {
         if (!res || !res.ok) return null;
         
         const html = await res.text();
+        if (isBlockedHtml(html)) return null;
         let summary = extractMetaDescription(html) || article.summary || article.title;
         summary = clampSummary(decodeHtml(stripHtml(summary)), 260);
 
-        return { ...article, url: res.url || original, summary };
+        const text = decodeHtml(stripHtml(html)).toLowerCase();
+        const titleHint = article.title.toLowerCase().replace(/[^a-z0-9가-힣\s]/gi, ' ').replace(/\s+/g, ' ').trim();
+        if (titleHint.length >= 8 && !text.includes(titleHint.slice(0, Math.min(titleHint.length, 80)))) return null;
+
+        return { ...article, url: res.url || original, summary, linkVerified: true, linkStatus: res.status, linkBlockedReason: null };
       } catch {
         return null;
       }
