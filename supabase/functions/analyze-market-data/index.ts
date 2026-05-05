@@ -36,14 +36,8 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Fetch existing research & patents for accumulation
-    const { data: existingResearch } = await supabase
-      .from('market_analysis').select('content').eq('type', 'research').maybeSingle();
-    const { data: existingPatents } = await supabase
-      .from('market_analysis').select('content').eq('type', 'patents').maybeSingle();
 
-    const existingPapers = (existingResearch?.content as any)?.papers || [];
-    const existingPatentsList = (existingPatents?.content as any)?.patents || [];
+
 
     const newsSummary = newsData.map(a =>
       `[${a.category?.join(', ')}] ${a.title_kr}\n${a.summary}\n출처: ${a.source} (${a.date})`
