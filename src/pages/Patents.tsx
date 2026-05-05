@@ -94,12 +94,11 @@ const Patents = () => {
                         <div>
                           <div className="flex flex-wrap items-center gap-2 mb-2">
                             <h2 className="text-xl font-semibold">{patent.title}</h2>
-                            {!patent.linkVerified && (
+                            {!patent.patentNumber && (
                               <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
-                                {getLinkBlockLabel(patent)}
+                                특허번호 없음
                               </Badge>
                             )}
-                            {patent.patentNumberVerified === false && (
                               <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
                                 번호 검증 실패
                               </Badge>
