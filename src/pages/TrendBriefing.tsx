@@ -10,12 +10,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Loader2, TrendingUp, ExternalLink, Calendar, Building2, BookOpen, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getLinkBlockLabel, isVerifiedHttpUrl } from "@/lib/linkValidation";
 
 interface Source {
   title_kr: string;
   source: string;
   date: string;
   url: string;
+  linkVerified?: boolean;
+  linkBlockedReason?: string | null;
 }
 
 interface ExternalRef {
@@ -109,7 +112,7 @@ const CardDetailDialog = ({
                 <h4 className="text-sm font-semibold mb-3 text-muted-foreground">출처 뉴스</h4>
                 <div className="space-y-2">
                   {card.sources.map((src, i) => {
-                    const isValidUrl = src.url && src.url.startsWith('http');
+                    const isValidUrl = isVerifiedHttpUrl(src.url, src.linkVerified);
                     return (
                       <a
                         key={i}
@@ -123,7 +126,7 @@ const CardDetailDialog = ({
                           <span className="text-sm font-medium line-clamp-1">{src.title_kr}</span>
                           {isValidUrl && <ExternalLink className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />}
                         </div>
-                        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
                           <span className="flex items-center gap-1">
                             <Building2 className="w-3 h-3" />
                             {src.source}
@@ -132,6 +135,7 @@ const CardDetailDialog = ({
                             <Calendar className="w-3 h-3" />
                             {src.date}
                           </span>
+                          {!isValidUrl && <span>{getLinkBlockLabel(src)}</span>}
                         </div>
                       </a>
                     );
