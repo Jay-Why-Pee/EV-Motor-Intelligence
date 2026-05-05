@@ -16,6 +16,7 @@ interface NewsCardProps {
 }
 
 export const NewsCard = ({ title_kr, summary, category, source, date, linkVerified, linkBlockedReason }: NewsCardProps) => {
+  const showBlockedState = linkVerified === false;
   return (
     <div className="block h-full">
       <Card className="p-5 card-glow group h-full flex flex-col hover:shadow-lg transition-shadow">
@@ -41,7 +42,7 @@ export const NewsCard = ({ title_kr, summary, category, source, date, linkVerifi
             <span className="truncate">{source}</span>
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            {!linkVerified && (
+            {showBlockedState && (
               <div className="flex items-center gap-1 text-destructive">
                 <ShieldAlert className="w-3 h-3" />
                 <span>{getLinkBlockLabel({ linkBlockedReason })}</span>
