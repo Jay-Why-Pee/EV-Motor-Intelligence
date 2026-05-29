@@ -82,16 +82,26 @@ serve(async (req) => {
       return content ? decodeHtml(stripHtml(content)).trim() : '';
     };
 
+     const WRAPPER_HOST_RE = /(^|\.)(google|bing|yahoo|duckduckgo|baidu|yandex)\.[a-z.]+$/i;
+     const isWrapperUrl = (u: string) => {
+       try {
+         const host = new URL(u).hostname.toLowerCase();
+         return WRAPPER_HOST_RE.test(host) || host === 'news.google.com';
+       } catch { return true; }
+     };
+
      const isBlockedHtml = (html: string) => /404|not found|page not found|403|access denied|forbidden|captcha|enable javascript|subscribe to continue/i.test(html.slice(0, 4000));
 
      const validateAndFixUrl = async (article: any) => {
       const original = normalizeUrl(article.url);
-      if (!original) return null;
+      if (!original || isWrapperUrl(original)) return null;
 
       try {
-        const res = await fetchWithTimeout(original, { method: 'GET' }, 8000).catch(() => null as any);
-        if (!res || !res.ok) return null;
-        
+        const res = await fetchWithTimeout(original, { method: 'GET', redirect: 'follow' }, 10000).catch(() => null as any);
+        if (!res || !res.ok || res.status >= 400) return null;
+        const finalUrl = res.url || original;
+        if (isWrapperUrl(finalUrl)) return null;
+
         const html = await res.text();
         if (isBlockedHtml(html)) return null;
         let summary = extractMetaDescription(html) || article.summary || article.title;
@@ -101,7 +111,7 @@ serve(async (req) => {
         const titleHint = article.title.toLowerCase().replace(/[^a-z0-9가-힣\s]/gi, ' ').replace(/\s+/g, ' ').trim();
         if (titleHint.length >= 8 && !text.includes(titleHint.slice(0, Math.min(titleHint.length, 80)))) return null;
 
-        return { ...article, url: res.url || original, summary, linkVerified: true, linkStatus: res.status, linkBlockedReason: null };
+        return { ...article, url: finalUrl, summary, linkVerified: true, linkStatus: res.status, linkBlockedReason: null };
       } catch {
         return null;
       }
@@ -234,7 +244,6 @@ Important:
       { name: 'CleanTechnica', url: 'https://cleantechnica.com/feed/' },
       { name: 'Green Car Reports', url: 'https://www.greencarreports.com/rss/all' },
       { name: 'Automotive News', url: 'https://www.autonews.com/rss' },
-      { name: 'Google News EV Motor', url: 'https://news.google.com/rss/search?q=electric+vehicle+motor+technology+BMW+Mercedes+Volkswagen+Hyundai+Bosch+ZF&hl=en-US&gl=US&ceid=US:en' },
       { name: 'Automotive World', url: 'https://www.automotiveworld.com/feed/' },
       { name: 'EV Magazine', url: 'https://evmagazine.com/feed' },
       { name: 'Power Electronics News', url: 'https://www.powerelectronicsnews.com/feed/' },
