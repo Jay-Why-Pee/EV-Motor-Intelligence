@@ -80,14 +80,16 @@ const Patents = () => {
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Search className="w-5 h-5 text-primary" />
-                  <h2 className="text-xl font-semibold">Google Patents에서 검색하기</h2>
+                  <h2 className="text-xl font-semibold">Espacenet에서 검색하기</h2>
                 </div>
-                <p className="text-sm text-muted-foreground">아래 키워드를 클릭하면 Google Patents에서 관련 특허를 직접 검색할 수 있습니다.</p>
+                <p className="text-sm text-muted-foreground">
+                  Google Patents는 일부 네트워크에서 차단되어, 유럽특허청(EPO)이 운영하는 무료 글로벌 특허 검색 서비스인 <strong>Espacenet</strong>으로 연결됩니다. 키워드를 클릭하면 관련 특허를 바로 조회할 수 있습니다.
+                </p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   {searchKeywords.map((item: any, idx: number) => (
                     <a
                       key={idx}
-                      href={`https://patents.google.com/?q=${encodeURIComponent(item.keyword)}&oq=${encodeURIComponent(item.keyword)}`}
+                      href={`https://worldwide.espacenet.com/patent/search?q=${encodeURIComponent(item.keyword)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block transition-transform hover:scale-[1.01]"
