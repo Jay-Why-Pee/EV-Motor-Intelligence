@@ -52,24 +52,38 @@ async function firecrawlSearch(apiKey: string, query: string, sources: string[],
   return Array.isArray(web) ? web : [];
 }
 
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
 async function callAI(lovableApiKey: string, system: string, user: string) {
-  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
-      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-      temperature: 0.3,
-      max_tokens: 1500,
-    }),
-  });
-  if (!res.ok) throw new Error(`AI error: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  let content = data.choices[0].message.content || '';
-  content = content.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-  const match = content.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try { return JSON.parse(match[0]); } catch { return null; }
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        temperature: 0.3,
+        max_tokens: 1500,
+      }),
+    });
+    if (res.status === 429) {
+      const wait = 5000 * (attempt + 1);
+      console.log(`AI rate-limited, waiting ${wait}ms`);
+      await sleep(wait);
+      continue;
+    }
+    if (!res.ok) {
+      console.error(`AI error ${res.status}: ${await res.text()}`);
+      return null;
+    }
+    const data = await res.json();
+    let content = data.choices?.[0]?.message?.content || '';
+    content = content.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+    const match = content.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    try { return JSON.parse(match[0]); } catch { return null; }
+  }
+  return null;
 }
 
 async function verifyUrl(url: string): Promise<boolean> {
