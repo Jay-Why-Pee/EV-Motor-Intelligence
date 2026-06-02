@@ -158,6 +158,84 @@ export type Database = {
         }
         Relationships: []
       }
+      patents: {
+        Row: {
+          applicant: string | null
+          created_at: string
+          filing_date: string | null
+          id: string
+          keyword: string | null
+          publication_number: string | null
+          source: string
+          summary: string
+          title: string
+          url: string
+        }
+        Insert: {
+          applicant?: string | null
+          created_at?: string
+          filing_date?: string | null
+          id?: string
+          keyword?: string | null
+          publication_number?: string | null
+          source?: string
+          summary: string
+          title: string
+          url: string
+        }
+        Update: {
+          applicant?: string | null
+          created_at?: string
+          filing_date?: string | null
+          id?: string
+          keyword?: string | null
+          publication_number?: string | null
+          source?: string
+          summary?: string
+          title?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      research_papers: {
+        Row: {
+          authors: string | null
+          created_at: string
+          id: string
+          keyword: string | null
+          published_date: string | null
+          source: string
+          summary: string
+          title: string
+          url: string
+          venue: string | null
+        }
+        Insert: {
+          authors?: string | null
+          created_at?: string
+          id?: string
+          keyword?: string | null
+          published_date?: string | null
+          source?: string
+          summary: string
+          title: string
+          url: string
+          venue?: string | null
+        }
+        Update: {
+          authors?: string | null
+          created_at?: string
+          id?: string
+          keyword?: string | null
+          published_date?: string | null
+          source?: string
+          summary?: string
+          title?: string
+          url?: string
+          venue?: string | null
+        }
+        Relationships: []
+      }
       site_config: {
         Row: {
           key: string
