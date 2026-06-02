@@ -126,7 +126,8 @@ serve(async (req) => {
   try {
     // ===== PATENTS =====
     if (mode === 'patents' || mode === 'both') {
-      const patentRows: any[] = [];
+      // Clear up front so partial progress still replaces old data
+      await supabase.from('patents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       for (const q of PATENT_QUERIES) {
         const query = `site:patents.google.com ${q}`;
         const items = await firecrawlSearch(firecrawlKey, query, ['web'], 4);
@@ -137,7 +138,6 @@ serve(async (req) => {
           const markdown: string = it.markdown || it.description || it.title || '';
           if (!markdown || markdown.length < 200) continue;
 
-          // Verify link is alive (Google Patents direct pages do load)
           const ok = await verifyUrl(url);
           if (!ok) { console.log(`skip dead url: ${url}`); continue; }
 
@@ -155,9 +155,10 @@ serve(async (req) => {
 Set is_traction_motor=false if the patent is not about EV traction motor hardware (e.g. batteries, inverters, charging, software).`,
             `URL: ${url}\n\nCONTENT:\n${markdown.slice(0, 8000)}`
           );
+          await sleep(1500); // throttle AI calls
           if (!ai || !ai.is_traction_motor || !ai.title || !ai.summary) continue;
 
-          patentRows.push({
+          const { error } = await supabase.from('patents').insert({
             title: ai.title,
             summary: ai.summary,
             applicant: ai.applicant || null,
@@ -167,22 +168,16 @@ Set is_traction_motor=false if the patent is not about EV traction motor hardwar
             source: 'Google Patents',
             keyword: q,
           });
+          if (error) console.error(`patents insert: ${error.message}`);
+          else results.patents++;
         }
-      }
-
-      if (patentRows.length > 0) {
-        await supabase.from('patents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        const { error } = await supabase.from('patents').insert(patentRows);
-        if (error) results.errors.push(`patents insert: ${error.message}`);
-        else results.patents = patentRows.length;
       }
     }
 
     // ===== RESEARCH =====
     if (mode === 'research' || mode === 'both') {
-      const paperRows: any[] = [];
+      await supabase.from('research_papers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       for (const q of RESEARCH_QUERIES) {
-        // Prefer arxiv/IEEE/MDPI which Firecrawl can scrape cleanly
         const query = `(site:arxiv.org OR site:mdpi.com OR site:ieeexplore.ieee.org OR site:sciencedirect.com) ${q}`;
         const items = await firecrawlSearch(firecrawlKey, query, ['web'], 4);
         console.log(`[research] "${q}" → ${items.length} results`);
@@ -209,9 +204,10 @@ Set is_traction_motor=false if the patent is not about EV traction motor hardwar
 Set is_traction_motor=false if the paper is not about EV traction motor hardware/control (exclude batteries, charging, ADAS).`,
             `URL: ${url}\n\nCONTENT:\n${markdown.slice(0, 8000)}`
           );
+          await sleep(1500);
           if (!ai || !ai.is_traction_motor || !ai.title || !ai.summary) continue;
 
-          paperRows.push({
+          const { error } = await supabase.from('research_papers').insert({
             title: ai.title,
             summary: ai.summary,
             authors: ai.authors || null,
@@ -221,14 +217,9 @@ Set is_traction_motor=false if the paper is not about EV traction motor hardware
             source: new URL(url).hostname.replace('www.', ''),
             keyword: q,
           });
+          if (error) console.error(`research insert: ${error.message}`);
+          else results.research++;
         }
-      }
-
-      if (paperRows.length > 0) {
-        await supabase.from('research_papers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        const { error } = await supabase.from('research_papers').insert(paperRows);
-        if (error) results.errors.push(`research insert: ${error.message}`);
-        else results.research = paperRows.length;
       }
     }
 
