@@ -27,6 +27,16 @@ const RESEARCH_QUERIES = [
   'electric vehicle motor thermal management',
 ];
 
+function buildEspacenetUrl(publicationNumber?: string | null, title?: string | null) {
+  const normalizedPublicationNumber = publicationNumber?.trim();
+
+  if (normalizedPublicationNumber) {
+    return `https://worldwide.espacenet.com/patent/search?q=${encodeURIComponent(`pn=${normalizedPublicationNumber}`)}`;
+  }
+
+  return `https://worldwide.espacenet.com/patent/search?q=${encodeURIComponent(title?.trim() || '')}`;
+}
+
 async function firecrawlSearch(apiKey: string, query: string, sources: string[], limit = 5) {
   const res = await fetch(`${FIRECRAWL_V2}/search`, {
     method: 'POST',
@@ -164,8 +174,8 @@ Set is_traction_motor=false if the patent is not about EV traction motor hardwar
             applicant: ai.applicant || null,
             publication_number: ai.publication_number || null,
             filing_date: ai.filing_date || null,
-            url,
-            source: 'Google Patents',
+            url: buildEspacenetUrl(ai.publication_number, ai.title),
+            source: 'Espacenet',
             keyword: q,
           });
           if (error) console.error(`patents insert: ${error.message}`);
