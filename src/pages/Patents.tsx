@@ -19,6 +19,16 @@ interface Patent {
   keyword: string | null;
 }
 
+const buildPatentAccessUrl = (patent: Patent) => {
+  const publicationNumber = patent.publication_number?.trim();
+
+  if (publicationNumber) {
+    return `https://worldwide.espacenet.com/patent/search?q=${encodeURIComponent(`pn=${publicationNumber}`)}`;
+  }
+
+  return `https://worldwide.espacenet.com/patent/search?q=${encodeURIComponent(patent.title)}`;
+};
+
 const Patents = () => {
   const [insights, setInsights] = useState<any[]>([]);
   const [patents, setPatents] = useState<Patent[]>([]);
@@ -57,7 +67,7 @@ const Patents = () => {
         <div className="mb-6">
           <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gradient">특허 동향 분석</h1>
           <p className="text-muted-foreground">
-            AI가 Google Patents에서 실제 EV 모터 관련 특허를 수집·읽어 한국어로 요약합니다. 카드 클릭 시 원문으로 이동합니다.
+            AI가 실제 EV 모터 관련 특허를 수집·읽어 한국어로 요약합니다. 카드 클릭 시 열람 가능한 Espacenet 검색 결과로 이동합니다.
           </p>
           {lastUpdated && (
             <p className="text-xs text-muted-foreground/70 mt-1">
@@ -97,7 +107,7 @@ const Patents = () => {
                   {patents.map((p) => (
                     <a
                       key={p.id}
-                      href={p.url}
+                      href={buildPatentAccessUrl(p)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block transition-transform hover:scale-[1.01]"
@@ -111,6 +121,7 @@ const Patents = () => {
                           {p.applicant && <Badge variant="secondary">{p.applicant}</Badge>}
                           {p.publication_number && <Badge variant="outline">{p.publication_number}</Badge>}
                           {p.filing_date && <Badge variant="outline">{p.filing_date}</Badge>}
+                          <Badge variant="outline">Espacenet 열람</Badge>
                         </div>
                         <p className="text-sm text-muted-foreground leading-relaxed">{p.summary}</p>
                       </Card>
