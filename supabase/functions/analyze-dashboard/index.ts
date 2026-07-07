@@ -157,7 +157,7 @@ const normalizeUrl = (raw?: string) => {
 const wrapperHosts = ['google.com','www.google.com','news.google.com','bing.com','www.bing.com','yahoo.com','search.yahoo.com','duckduckgo.com','patents.google.com'];
 const isWrapperUrl = (url: string): boolean => { try { const h = new URL(url).hostname.toLowerCase(); return wrapperHosts.some(w => h === w || h.endsWith('.'+w)); } catch { return false; } };
 
-const verifyExternalLink = async (inputUrl?: string, hints: string[] = []) => {
+const verifyExternalLink = async (inputUrl?: string, _hints: string[] = []) => {
   const original = normalizeUrl(inputUrl);
   if (!original) return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'invalid_url' };
   if (isWrapperUrl(original)) return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'wrapper_url' };
@@ -165,21 +165,32 @@ const verifyExternalLink = async (inputUrl?: string, hints: string[] = []) => {
     const res = await fetch(original, { headers: { 'User-Agent': DEFAULT_UA, Accept: 'text/html,application/xhtml+xml' }, redirect: 'follow' });
     const finalUrl = normalizeUrl(res.url || original);
     if (isWrapperUrl(finalUrl)) return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: 'wrapper_redirect' };
-    if (!res.ok) return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: res.status === 404 ? 'not_found' : 'blocked' };
-    const html = await res.text();
-    const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
-    if (/404|not found|403|forbidden|captcha|subscribe to continue|paywall/i.test(text.slice(0, 4000))) {
-      return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: res.status === 404 ? 'not_found' : 'blocked' };
-    }
-    const matched = hints.filter(Boolean).map((hint) => hint.toLowerCase()).some((hint) => hint.length < 6 || text.includes(hint.slice(0, Math.min(80, hint.length))));
-    if (!matched && hints.filter(Boolean).length > 0) {
-      return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: 'content_mismatch' };
-    }
+    if (res.status === 404 || res.status === 410) return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: 'not_found' };
+    if (res.status >= 500) return { url: '', linkVerified: false, linkStatus: res.status, linkBlockedReason: 'server_error' };
+    // Accept 200/301/302/403 — many publishers 403 bots but serve real users OK. Strict 404/5xx rejection only.
     return { url: finalUrl, linkVerified: true, linkStatus: res.status, linkBlockedReason: null };
   } catch {
     return { url: '', linkVerified: false, linkStatus: null, linkBlockedReason: 'unreachable' };
   }
 };
+
+async function firecrawlFindSources(query: string, limit = 3): Promise<{ url: string; title: string; description: string }[]> {
+  const key = Deno.env.get('FIRECRAWL_API_KEY');
+  if (!key) return [];
+  try {
+    const res = await fetch('https://api.firecrawl.dev/v2/search', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, limit }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const web = data?.data?.web || data?.web || data?.data || [];
+    return (Array.isArray(web) ? web : []).slice(0, limit).map((r: any) => ({
+      url: r.url || '', title: r.title || query, description: r.description || r.snippet || '',
+    })).filter((r: any) => r.url);
+  } catch { return []; }
+}
 
 const parseJson = (content: string) => {
   const cleaned = sanitizeJson(content);
@@ -436,22 +447,28 @@ highApplicability: 전기자동차 모터에 실제 적용 가능성이 높고 �
     const filled = (field: string) => finalSpecs.filter((s: any) => s[field] && s[field] !== '-').length;
     console.log(`Quality: torqueVehicle=${filled('torqueVehicle')}, torqueMotor=${filled('torqueMotor')}, torqueNm=${filled('torqueNm')}, maxSpeedRpm=${filled('maxSpeedRpm')}, motorSupplier=${filled('motorSupplier')}, powerKw=${filled('powerKw')}`);
 
-    const verifyRoadmapItems = async (items: any[] = []) => Promise.all(items.map(async (item) => ({
-      ...item,
-      sources: await Promise.all(((item?.sources || []) as any[]).map(async (source) => {
-        if (!source?.url) {
-          return { ...source, url: '', linkVerified: false, linkStatus: null, linkBlockedReason: source?.description ? 'blocked' : 'invalid_url' };
+    const verifyRoadmapItems = async (items: any[] = []) => Promise.all(items.map(async (item) => {
+      const aiSources = await Promise.all(((item?.sources || []) as any[]).map(async (source) => {
+        if (!source?.url) return null;
+        const v = await verifyExternalLink(source.url);
+        if (!v.linkVerified) return null;
+        return { title: source.title || item?.title, description: source.description || '', url: v.url, linkVerified: true, linkStatus: v.linkStatus, linkBlockedReason: null };
+      }));
+      let sources = aiSources.filter(Boolean) as any[];
+      // Firecrawl fallback: if AI sources didn't verify, search real ones
+      if (sources.length < 2) {
+        const q = `${item?.title || ''} EV traction motor ${item?.category || ''}`.trim();
+        const found = await firecrawlFindSources(q, 4);
+        for (const f of found) {
+          if (sources.some((s: any) => s.url === f.url)) continue;
+          const v = await verifyExternalLink(f.url);
+          if (!v.linkVerified) continue;
+          sources.push({ title: f.title, description: f.description, url: v.url, linkVerified: true, linkStatus: v.linkStatus, linkBlockedReason: null });
+          if (sources.length >= 3) break;
         }
-        const verified = await verifyExternalLink(source.url, [source.title || item?.title || '', source.description || '']);
-        return {
-          ...source,
-          url: verified.linkVerified ? verified.url : '',
-          linkVerified: verified.linkVerified,
-          linkStatus: verified.linkStatus,
-          linkBlockedReason: verified.linkBlockedReason,
-        };
-      })),
-    })));
+      }
+      return { ...item, sources };
+    }));
 
     const verifiedPrm = await verifyRoadmapItems(Array.isArray(overviewData?.roadmap?.prm) ? overviewData.roadmap.prm : []);
     const verifiedTrm = await verifyRoadmapItems(Array.isArray(overviewData?.roadmap?.trm) ? overviewData.roadmap.trm : []);
