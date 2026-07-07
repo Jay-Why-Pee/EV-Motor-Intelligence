@@ -186,7 +186,13 @@ Set is_traction_motor=false if the patent is not about EV traction motor hardwar
     // ===== RESEARCH =====
     if (mode === 'research' || mode === 'both') {
       await supabase.from('research_papers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      const RESEARCH_SITES = ['arxiv.org', 'mdpi.com', 'ieeexplore.ieee.org', 'sciencedirect.com'];
       for (const q of RESEARCH_QUERIES) {
+        for (const site of RESEARCH_SITES) {
+          const query = `site:${site} ${q}`;
+          const items = await firecrawlSearch(firecrawlKey, query, ['web'], 2);
+          console.log(`[research] "${q}" @${site} → ${items.length} results`);
+          for (const it of items) {
         const query = `(site:arxiv.org OR site:mdpi.com OR site:ieeexplore.ieee.org OR site:sciencedirect.com) ${q}`;
         const items = await firecrawlSearch(firecrawlKey, query, ['web'], 4);
         console.log(`[research] "${q}" → ${items.length} results`);
