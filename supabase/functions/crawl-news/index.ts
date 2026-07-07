@@ -168,11 +168,13 @@ serve(async (req) => {
 
 Categories: Asia, Europe, North America, China, GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely, Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo, Other
 
-Important: 
-- Select MULTIPLE categories if the article is relevant to more than one
-- PRIORITIZE articles about customers (GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely) and motor manufacturers (Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo)
+Rules:
+- MULTI-tag: assign every relevant company + region category. Do NOT be conservative — if a company is mentioned in a substantive context (product, partnership, financials, tech), tag it.
+- STRONG PRIORITY on Motor Manufacturers (Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo) — tag them whenever the article touches their motor / e-axle / drive-unit / inverter business, even as a supplier mention.
+- Also prioritize major OEM customers (GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely).
+- Use "Other" ONLY when no listed company OR region applies.
 - Example: Mercedes EV article in Europe → ["Europe", "Mercedes-Benz"]
-- Example: Bosch motor tech in North America → ["North America", "Bosch"]`
+- Example: Bosch supplying motors to Ford in the US → ["North America", "Bosch", "Ford"]`
                 },
                 {
                   role: "user",
@@ -249,29 +251,75 @@ Important:
       { name: 'Power Electronics News', url: 'https://www.powerelectronicsnews.com/feed/' },
     ];
 
+    // MAJOR companies to actively seed via targeted Google News RSS.
+    // Priority: Motor Manufacturers (Tier-1 suppliers) + top OEM customers.
+    const MAJOR_MANUFACTURERS = [
+      'Bosch', 'ZF', 'Schaeffler', 'LG Magna', 'Denso', 'Magna',
+      'Hyundai Mobis', 'AISIN', 'BorgWarner', 'Hitachi Astemo',
+      'Nidec', 'Vitesco', 'Valeo',
+    ];
+    const MAJOR_OEMS = [
+      'Tesla', 'BYD', 'Hyundai', 'GM', 'Ford', 'Volkswagen',
+      'Mercedes-Benz', 'BMW', 'Toyota', 'Stellantis', 'Xiaomi', 'Geely',
+    ];
+
+    const buildGoogleNewsRss = (q: string) =>
+      `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
+
+    // Give Motor Manufacturers 2x weight vs OEMs
+    const majorFeeds = [
+      ...MAJOR_MANUFACTURERS.flatMap((c) => [
+        { name: `GN:${c} motor`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR EV)`) },
+        { name: `GN:${c} EV`, url: buildGoogleNewsRss(`"${c}" (EV drive unit OR inverter OR "electric drive")`) },
+      ]),
+      ...MAJOR_OEMS.map((c) => (
+        { name: `GN:${c}`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR "drive unit")`) }
+      )),
+    ];
+
     const collectedArticles: any[] = [];
     const seenUrls = new Set<string>();
 
-    for (const feed of feeds) {
-      if (collectedArticles.length >= 300) break;
-      
+    // Google News RSS returns wrapper URLs — resolve to publisher URL.
+    const resolveGoogleNews = async (u: string): Promise<string> => {
       try {
-        console.log(`Fetching: ${feed.name}`);
-        const res = await fetchWithTimeout(feed.url, {}, 10000);
-        if (!res.ok) continue;
+        const host = new URL(u).hostname.toLowerCase();
+        if (!host.includes('news.google.com') && !host.includes('google.com')) return u;
+        const r = await fetchWithTimeout(u, { redirect: 'follow' }, 8000);
+        return r?.url || u;
+      } catch { return u; }
+    };
 
+    const ingestFeed = async (feed: { name: string; url: string }, perFeedCap: number) => {
+      try {
+        const res = await fetchWithTimeout(feed.url, {}, 10000);
+        if (!res.ok) return;
         const xml = await res.text();
         const items = parseRssItems(xml);
-
-        for (const item of items.slice(0, 50)) {
-          if (collectedArticles.length >= 300) break;
-          const url = normalizeUrl(item.url);
-          if (url && !seenUrls.has(url)) {
-            seenUrls.add(url);
-            collectedArticles.push({ ...item, url, source: feed.name });
-          }
+        for (const item of items.slice(0, perFeedCap)) {
+          if (collectedArticles.length >= 500) return;
+          let url = normalizeUrl(item.url);
+          if (!url) continue;
+          if (feed.name.startsWith('GN:')) url = normalizeUrl(await resolveGoogleNews(url));
+          if (!url || seenUrls.has(url)) continue;
+          seenUrls.add(url);
+          collectedArticles.push({ ...item, url, source: feed.name.startsWith('GN:') ? feed.name.slice(3) : feed.name });
         }
       } catch {}
+    };
+
+    // 1) Seed from major-company targeted queries FIRST (priority)
+    for (const feed of majorFeeds) {
+      if (collectedArticles.length >= 400) break;
+      console.log(`Fetching (major): ${feed.name}`);
+      await ingestFeed(feed, 8);
+    }
+
+    // 2) Fill with generic EV feeds
+    for (const feed of feeds) {
+      if (collectedArticles.length >= 500) break;
+      console.log(`Fetching: ${feed.name}`);
+      await ingestFeed(feed, 40);
     }
 
     console.log(`Collected: ${collectedArticles.length}`);
