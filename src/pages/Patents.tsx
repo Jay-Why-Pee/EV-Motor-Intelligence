@@ -20,13 +20,12 @@ interface Patent {
 }
 
 const buildPatentAccessUrl = (patent: Patent) => {
-  const publicationNumber = patent.publication_number?.trim();
-
-  if (publicationNumber) {
-    return `https://worldwide.espacenet.com/patent/search?q=${encodeURIComponent(`pn=${publicationNumber}`)}`;
+  const pn = patent.publication_number?.trim();
+  if (pn) return `https://patents.google.com/patent/${encodeURIComponent(pn)}/en`;
+  if (patent.url && patent.url.startsWith('http') && !patent.url.includes('espacenet.com/patent/search')) {
+    return patent.url;
   }
-
-  return `https://worldwide.espacenet.com/patent/search?q=${encodeURIComponent(patent.title)}`;
+  return `https://patents.google.com/?q=${encodeURIComponent(patent.title)}`;
 };
 
 const Patents = () => {
@@ -67,7 +66,7 @@ const Patents = () => {
         <div className="mb-6">
           <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gradient">특허 동향 분석</h1>
           <p className="text-muted-foreground">
-            AI가 실제 EV 모터 관련 특허를 수집·읽어 한국어로 요약합니다. 카드 클릭 시 열람 가능한 Espacenet 검색 결과로 이동합니다.
+            AI가 실제 EV 모터 관련 특허를 수집·읽어 한국어로 요약합니다. 카드 클릭 시 Google Patents 원문으로 이동합니다.
           </p>
           {lastUpdated && (
             <p className="text-xs text-muted-foreground/70 mt-1">
@@ -121,7 +120,7 @@ const Patents = () => {
                           {p.applicant && <Badge variant="secondary">{p.applicant}</Badge>}
                           {p.publication_number && <Badge variant="outline">{p.publication_number}</Badge>}
                           {p.filing_date && <Badge variant="outline">{p.filing_date}</Badge>}
-                          <Badge variant="outline">Espacenet 열람</Badge>
+                          <Badge variant="outline">Google Patents</Badge>
                         </div>
                         <p className="text-sm text-muted-foreground leading-relaxed">{p.summary}</p>
                       </Card>

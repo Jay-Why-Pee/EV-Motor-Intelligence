@@ -27,14 +27,11 @@ const RESEARCH_QUERIES = [
   'electric vehicle motor thermal management',
 ];
 
-function buildEspacenetUrl(publicationNumber?: string | null, title?: string | null) {
-  const normalizedPublicationNumber = publicationNumber?.trim();
-
-  if (normalizedPublicationNumber) {
-    return `https://worldwide.espacenet.com/patent/search?q=${encodeURIComponent(`pn=${normalizedPublicationNumber}`)}`;
-  }
-
-  return `https://worldwide.espacenet.com/patent/search?q=${encodeURIComponent(title?.trim() || '')}`;
+function buildPatentUrl(publicationNumber?: string | null, sourceUrl?: string | null) {
+  const pn = publicationNumber?.trim();
+  if (pn) return `https://patents.google.com/patent/${encodeURIComponent(pn)}/en`;
+  if (sourceUrl && sourceUrl.startsWith('http')) return sourceUrl;
+  return '';
 }
 
 async function firecrawlSearch(apiKey: string, query: string, sources: string[], limit = 5) {
@@ -168,14 +165,16 @@ Set is_traction_motor=false if the patent is not about EV traction motor hardwar
           await sleep(1500); // throttle AI calls
           if (!ai || !ai.is_traction_motor || !ai.title || !ai.summary) continue;
 
+          const finalUrl = buildPatentUrl(ai.publication_number, url);
+          if (!finalUrl) continue;
           const { error } = await supabase.from('patents').insert({
             title: ai.title,
             summary: ai.summary,
             applicant: ai.applicant || null,
             publication_number: ai.publication_number || null,
             filing_date: ai.filing_date || null,
-            url: buildEspacenetUrl(ai.publication_number, ai.title),
-            source: 'Espacenet',
+            url: finalUrl,
+            source: 'Google Patents',
             keyword: q,
           });
           if (error) console.error(`patents insert: ${error.message}`);
@@ -187,22 +186,24 @@ Set is_traction_motor=false if the patent is not about EV traction motor hardwar
     // ===== RESEARCH =====
     if (mode === 'research' || mode === 'both') {
       await supabase.from('research_papers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      const RESEARCH_SITES = ['arxiv.org', 'mdpi.com', 'ieeexplore.ieee.org', 'sciencedirect.com'];
       for (const q of RESEARCH_QUERIES) {
-        const query = `(site:arxiv.org OR site:mdpi.com OR site:ieeexplore.ieee.org OR site:sciencedirect.com) ${q}`;
-        const items = await firecrawlSearch(firecrawlKey, query, ['web'], 4);
-        console.log(`[research] "${q}" → ${items.length} results`);
-        for (const it of items) {
-          const url: string = it.url || '';
-          if (!url) continue;
-          const markdown: string = it.markdown || it.description || it.title || '';
-          if (!markdown || markdown.length < 200) continue;
+        for (const site of RESEARCH_SITES) {
+          const query = `site:${site} ${q}`;
+          const items = await firecrawlSearch(firecrawlKey, query, ['web'], 2);
+          console.log(`[research] "${q}" @${site} → ${items.length} results`);
+          for (const it of items) {
+            const url: string = it.url || '';
+            if (!url) continue;
+            const markdown: string = it.markdown || it.description || it.title || '';
+            if (!markdown || markdown.length < 200) continue;
 
-          const ok = await verifyUrl(url);
-          if (!ok) continue;
+            const ok = await verifyUrl(url);
+            if (!ok) continue;
 
-          const ai = await callAI(
-            lovableKey,
-            `You are an EV traction motor research analyst. Given the paper page content, output ONLY JSON:
+            const ai = await callAI(
+              lovableKey,
+              `You are an EV traction motor research analyst. Given the paper page content, output ONLY JSON:
 {
  "title": "paper title (English)",
  "summary": "3-5 sentence summary IN KOREAN focusing on the motor technology contribution (방법/결과/의의)",
@@ -212,26 +213,28 @@ Set is_traction_motor=false if the patent is not about EV traction motor hardwar
  "is_traction_motor": true/false
 }
 Set is_traction_motor=false if the paper is not about EV traction motor hardware/control (exclude batteries, charging, ADAS).`,
-            `URL: ${url}\n\nCONTENT:\n${markdown.slice(0, 8000)}`
-          );
-          await sleep(1500);
-          if (!ai || !ai.is_traction_motor || !ai.title || !ai.summary) continue;
+              `URL: ${url}\n\nCONTENT:\n${markdown.slice(0, 8000)}`
+            );
+            await sleep(1500);
+            if (!ai || !ai.is_traction_motor || !ai.title || !ai.summary) continue;
 
-          const { error } = await supabase.from('research_papers').insert({
-            title: ai.title,
-            summary: ai.summary,
-            authors: ai.authors || null,
-            venue: ai.venue || null,
-            published_date: ai.published_date || null,
-            url,
-            source: new URL(url).hostname.replace('www.', ''),
-            keyword: q,
-          });
-          if (error) console.error(`research insert: ${error.message}`);
-          else results.research++;
+            const { error } = await supabase.from('research_papers').insert({
+              title: ai.title,
+              summary: ai.summary,
+              authors: ai.authors || null,
+              venue: ai.venue || null,
+              published_date: ai.published_date || null,
+              url,
+              source: new URL(url).hostname.replace('www.', ''),
+              keyword: q,
+            });
+            if (error) console.error(`research insert: ${error.message}`);
+            else results.research++;
+          }
         }
       }
     }
+
 
     return new Response(JSON.stringify({ success: true, ...results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
