@@ -29,8 +29,13 @@ const RESEARCH_QUERIES = [
 
 function buildPatentUrl(publicationNumber?: string | null, sourceUrl?: string | null) {
   const pn = publicationNumber?.trim();
-  if (pn) return `https://patents.google.com/patent/${encodeURIComponent(pn)}/en`;
-  if (sourceUrl && sourceUrl.startsWith('http')) return sourceUrl;
+  if (pn) {
+    const directPath = `patents.google.com/patent/${pn}/en`;
+    return `https://www.google.com/search?q=${encodeURIComponent(directPath)}`;
+  }
+  if (sourceUrl?.includes('patents.google.com/patent/')) {
+    return `https://www.google.com/search?q=${encodeURIComponent(sourceUrl.replace(/^https?:\/\//i, ''))}`;
+  }
   return '';
 }
 
@@ -174,7 +179,7 @@ Set is_traction_motor=false if the patent is not about EV traction motor hardwar
             publication_number: ai.publication_number || null,
             filing_date: ai.filing_date || null,
             url: finalUrl,
-            source: 'Google Patents',
+            source: 'Google Search → Google Patents',
             keyword: q,
           });
           if (error) console.error(`patents insert: ${error.message}`);
