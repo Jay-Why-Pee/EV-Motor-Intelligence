@@ -168,11 +168,13 @@ serve(async (req) => {
 
 Categories: Asia, Europe, North America, China, GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely, Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo, Other
 
-Important: 
-- Select MULTIPLE categories if the article is relevant to more than one
-- PRIORITIZE articles about customers (GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely) and motor manufacturers (Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo)
+Rules:
+- MULTI-tag: assign every relevant company + region category. Do NOT be conservative — if a company is mentioned in a substantive context (product, partnership, financials, tech), tag it.
+- STRONG PRIORITY on Motor Manufacturers (Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo) — tag them whenever the article touches their motor / e-axle / drive-unit / inverter business, even as a supplier mention.
+- Also prioritize major OEM customers (GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely).
+- Use "Other" ONLY when no listed company OR region applies.
 - Example: Mercedes EV article in Europe → ["Europe", "Mercedes-Benz"]
-- Example: Bosch motor tech in North America → ["North America", "Bosch"]`
+- Example: Bosch supplying motors to Ford in the US → ["North America", "Bosch", "Ford"]`
                 },
                 {
                   role: "user",
