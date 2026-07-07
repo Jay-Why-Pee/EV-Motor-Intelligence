@@ -193,21 +193,17 @@ Set is_traction_motor=false if the patent is not about EV traction motor hardwar
           const items = await firecrawlSearch(firecrawlKey, query, ['web'], 2);
           console.log(`[research] "${q}" @${site} → ${items.length} results`);
           for (const it of items) {
-        const query = `(site:arxiv.org OR site:mdpi.com OR site:ieeexplore.ieee.org OR site:sciencedirect.com) ${q}`;
-        const items = await firecrawlSearch(firecrawlKey, query, ['web'], 4);
-        console.log(`[research] "${q}" → ${items.length} results`);
-        for (const it of items) {
-          const url: string = it.url || '';
-          if (!url) continue;
-          const markdown: string = it.markdown || it.description || it.title || '';
-          if (!markdown || markdown.length < 200) continue;
+            const url: string = it.url || '';
+            if (!url) continue;
+            const markdown: string = it.markdown || it.description || it.title || '';
+            if (!markdown || markdown.length < 200) continue;
 
-          const ok = await verifyUrl(url);
-          if (!ok) continue;
+            const ok = await verifyUrl(url);
+            if (!ok) continue;
 
-          const ai = await callAI(
-            lovableKey,
-            `You are an EV traction motor research analyst. Given the paper page content, output ONLY JSON:
+            const ai = await callAI(
+              lovableKey,
+              `You are an EV traction motor research analyst. Given the paper page content, output ONLY JSON:
 {
  "title": "paper title (English)",
  "summary": "3-5 sentence summary IN KOREAN focusing on the motor technology contribution (방법/결과/의의)",
@@ -217,26 +213,28 @@ Set is_traction_motor=false if the patent is not about EV traction motor hardwar
  "is_traction_motor": true/false
 }
 Set is_traction_motor=false if the paper is not about EV traction motor hardware/control (exclude batteries, charging, ADAS).`,
-            `URL: ${url}\n\nCONTENT:\n${markdown.slice(0, 8000)}`
-          );
-          await sleep(1500);
-          if (!ai || !ai.is_traction_motor || !ai.title || !ai.summary) continue;
+              `URL: ${url}\n\nCONTENT:\n${markdown.slice(0, 8000)}`
+            );
+            await sleep(1500);
+            if (!ai || !ai.is_traction_motor || !ai.title || !ai.summary) continue;
 
-          const { error } = await supabase.from('research_papers').insert({
-            title: ai.title,
-            summary: ai.summary,
-            authors: ai.authors || null,
-            venue: ai.venue || null,
-            published_date: ai.published_date || null,
-            url,
-            source: new URL(url).hostname.replace('www.', ''),
-            keyword: q,
-          });
-          if (error) console.error(`research insert: ${error.message}`);
-          else results.research++;
+            const { error } = await supabase.from('research_papers').insert({
+              title: ai.title,
+              summary: ai.summary,
+              authors: ai.authors || null,
+              venue: ai.venue || null,
+              published_date: ai.published_date || null,
+              url,
+              source: new URL(url).hostname.replace('www.', ''),
+              keyword: q,
+            });
+            if (error) console.error(`research insert: ${error.message}`);
+            else results.research++;
+          }
         }
       }
     }
+
 
     return new Response(JSON.stringify({ success: true, ...results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
