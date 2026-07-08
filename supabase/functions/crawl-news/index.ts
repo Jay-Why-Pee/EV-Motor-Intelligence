@@ -153,6 +153,24 @@ serve(async (req) => {
       return items;
     };
 
+    const CATEGORY_WHITELIST = new Set([
+      "Asia","Europe","North America","China","GM","Ford","Mercedes-Benz","BMW","Volkswagen","Honda","Hyundai","Stellantis","Toyota","Tesla","Nissan","Renault","BYD","Xiaomi","Geely","Bosch","ZF","Schaeffler","LG Magna","Denso","Magna","Hyundai Mobis","AISIN","BorgWarner","Hitachi Astemo","Other"
+    ]);
+    const CATEGORY_ALIASES: Record<string, string> = {
+      "기타": "Other", "북미": "North America", "유럽": "Europe", "아시아": "Asia", "중국": "China",
+      "테슬라": "Tesla", "폭스바겐": "Volkswagen", "현대/기아": "Hyundai", "현대": "Hyundai", "기아": "Hyundai",
+      "벤츠": "Mercedes-Benz", "Kia": "Hyundai", "Volvo": "Other", "Daimler Truck": "Other",
+    };
+    const normalizeCategories = (cats: any): string[] => {
+      if (!Array.isArray(cats)) return ["Other"];
+      const mapped = cats
+        .map((c: any) => String(c || "").trim())
+        .map((c: string) => CATEGORY_ALIASES[c] || c)
+        .filter((c: string) => CATEGORY_WHITELIST.has(c));
+      const uniq = Array.from(new Set(mapped));
+      return uniq.length > 0 ? uniq : ["Other"];
+    };
+
     const classifyAndTranslate = async (articles: any[]) => {
       const batchSize = 10;
       const processed: any[] = [];
