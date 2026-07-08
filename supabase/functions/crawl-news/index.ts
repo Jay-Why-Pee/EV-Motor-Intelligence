@@ -107,9 +107,17 @@ serve(async (req) => {
         let summary = extractMetaDescription(html) || article.summary || article.title;
         summary = clampSummary(decodeHtml(stripHtml(summary)), 260);
 
-        const text = decodeHtml(stripHtml(html)).toLowerCase();
-        const titleHint = article.title.toLowerCase().replace(/[^a-z0-9가-힣\s]/gi, ' ').replace(/\s+/g, ' ').trim();
-        if (titleHint.length >= 8 && !text.includes(titleHint.slice(0, Math.min(titleHint.length, 80)))) return null;
+        // Loose title match: require ≥3 of first 5 significant words to appear
+        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9가-힣\s]/gi, ' ').replace(/\s+/g, ' ').trim();
+        const text = norm(decodeHtml(stripHtml(html)));
+        const titleHint = norm(article.title);
+        if (titleHint.length >= 12) {
+          const words = titleHint.split(' ').filter(w => w.length >= 3).slice(0, 5);
+          if (words.length >= 3) {
+            const hits = words.filter(w => text.includes(w)).length;
+            if (hits < 3) return null;
+          }
+        }
 
         return { ...article, url: finalUrl, summary, linkVerified: true, linkStatus: res.status, linkBlockedReason: null };
       } catch {
@@ -143,6 +151,24 @@ serve(async (req) => {
         }
       }
       return items;
+    };
+
+    const CATEGORY_WHITELIST = new Set([
+      "Asia","Europe","North America","China","GM","Ford","Mercedes-Benz","BMW","Volkswagen","Honda","Hyundai","Stellantis","Toyota","Tesla","Nissan","Renault","BYD","Xiaomi","Geely","Bosch","ZF","Schaeffler","LG Magna","Denso","Magna","Hyundai Mobis","AISIN","BorgWarner","Hitachi Astemo","Other"
+    ]);
+    const CATEGORY_ALIASES: Record<string, string> = {
+      "기타": "Other", "북미": "North America", "유럽": "Europe", "아시아": "Asia", "중국": "China",
+      "테슬라": "Tesla", "폭스바겐": "Volkswagen", "현대/기아": "Hyundai", "현대": "Hyundai", "기아": "Hyundai",
+      "벤츠": "Mercedes-Benz", "Kia": "Hyundai", "Volvo": "Other", "Daimler Truck": "Other",
+    };
+    const normalizeCategories = (cats: any): string[] => {
+      if (!Array.isArray(cats)) return ["Other"];
+      const mapped = cats
+        .map((c: any) => String(c || "").trim())
+        .map((c: string) => CATEGORY_ALIASES[c] || c)
+        .filter((c: string) => CATEGORY_WHITELIST.has(c));
+      const uniq = Array.from(new Set(mapped));
+      return uniq.length > 0 ? uniq : ["Other"];
     };
 
     const classifyAndTranslate = async (articles: any[]) => {
@@ -226,7 +252,7 @@ Rules:
           for (const cls of result.results || []) {
             const article = batch[cls.index];
             if (article) {
-              const categories = Array.isArray(cls.categories) && cls.categories.length > 0 ? cls.categories : ["Other"];
+              const categories = normalizeCategories(cls.categories);
               processed.push({ ...article, category: categories, title_kr: cls.title_kr || article.title });
             }
           }
@@ -252,7 +278,6 @@ Rules:
     ];
 
     // MAJOR companies to actively seed via targeted Google News RSS.
-    // Priority: Motor Manufacturers (Tier-1 suppliers) + top OEM customers.
     const MAJOR_MANUFACTURERS = [
       'Bosch', 'ZF', 'Schaeffler', 'LG Magna', 'Denso', 'Magna',
       'Hyundai Mobis', 'AISIN', 'BorgWarner', 'Hitachi Astemo',
@@ -261,16 +286,17 @@ Rules:
     const MAJOR_OEMS = [
       'Tesla', 'BYD', 'Hyundai', 'GM', 'Ford', 'Volkswagen',
       'Mercedes-Benz', 'BMW', 'Toyota', 'Stellantis', 'Xiaomi', 'Geely',
+      'Honda', 'Nissan', 'Renault',
     ];
 
     const buildGoogleNewsRss = (q: string) =>
-      `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
+      `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en&when:180d`;
 
-    // Give Motor Manufacturers 2x weight vs OEMs
+    // 2 targeted queries per manufacturer + 1 per OEM
     const majorFeeds = [
       ...MAJOR_MANUFACTURERS.flatMap((c) => [
-        { name: `GN:${c} motor`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR EV)`) },
-        { name: `GN:${c} EV`, url: buildGoogleNewsRss(`"${c}" (EV drive unit OR inverter OR "electric drive")`) },
+        { name: `GN:${c} motor`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-motor OR e-axle)`) },
+        { name: `GN:${c} EV`, url: buildGoogleNewsRss(`"${c}" ("drive unit" OR inverter OR "EV drive" OR "electric drive")`) },
       ]),
       ...MAJOR_OEMS.map((c) => (
         { name: `GN:${c}`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR "drive unit")`) }
@@ -280,27 +306,29 @@ Rules:
     const collectedArticles: any[] = [];
     const seenUrls = new Set<string>();
 
-    // Google News RSS returns wrapper URLs — resolve to publisher URL.
-    const resolveGoogleNews = async (u: string): Promise<string> => {
-      try {
-        const host = new URL(u).hostname.toLowerCase();
-        if (!host.includes('news.google.com') && !host.includes('google.com')) return u;
-        const r = await fetchWithTimeout(u, { redirect: 'follow' }, 8000);
-        return r?.url || u;
-      } catch { return u; }
+    // Parallel fetch of all RSS feed XMLs with a concurrency limit.
+    // Skip Google News redirect resolution here — validateAndFixUrl follows
+    // redirects and returns the final publisher URL, so we dedup post-validate.
+    const runWithLimit = async <T,>(items: T[], limit: number, worker: (t: T) => Promise<void>) => {
+      let idx = 0;
+      const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (idx < items.length) {
+          const my = idx++;
+          await worker(items[my]);
+        }
+      });
+      await Promise.all(runners);
     };
 
-    const ingestFeed = async (feed: { name: string; url: string }, perFeedCap: number) => {
+    const fetchFeedItems = async (feed: { name: string; url: string }, perFeedCap: number) => {
       try {
         const res = await fetchWithTimeout(feed.url, {}, 10000);
         if (!res.ok) return;
         const xml = await res.text();
-        const items = parseRssItems(xml);
-        for (const item of items.slice(0, perFeedCap)) {
-          if (collectedArticles.length >= 500) return;
-          let url = normalizeUrl(item.url);
-          if (!url) continue;
-          if (feed.name.startsWith('GN:')) url = normalizeUrl(await resolveGoogleNews(url));
+        const items = parseRssItems(xml).slice(0, perFeedCap);
+        for (const item of items) {
+          if (collectedArticles.length >= 800) return;
+          const url = normalizeUrl(item.url);
           if (!url || seenUrls.has(url)) continue;
           seenUrls.add(url);
           collectedArticles.push({ ...item, url, source: feed.name.startsWith('GN:') ? feed.name.slice(3) : feed.name });
@@ -308,27 +336,27 @@ Rules:
       } catch {}
     };
 
-    // 1) Seed from major-company targeted queries FIRST (priority)
-    for (const feed of majorFeeds) {
-      if (collectedArticles.length >= 400) break;
-      console.log(`Fetching (major): ${feed.name}`);
-      await ingestFeed(feed, 8);
-    }
+    console.log(`Fetching ${majorFeeds.length} major-company feeds in parallel...`);
+    await runWithLimit(majorFeeds, 8, (f) => fetchFeedItems(f, 15));
+    console.log(`After major feeds: ${collectedArticles.length}`);
 
-    // 2) Fill with generic EV feeds
-    for (const feed of feeds) {
-      if (collectedArticles.length >= 500) break;
-      console.log(`Fetching: ${feed.name}`);
-      await ingestFeed(feed, 40);
-    }
+    console.log(`Fetching ${feeds.length} generic feeds in parallel...`);
+    await runWithLimit(feeds, 6, (f) => fetchFeedItems(f, 40));
+
 
     console.log(`Collected: ${collectedArticles.length}`);
 
-    const validated = [];
-    for (let i = 0; i < collectedArticles.length; i += 5) {
-      const batch = await Promise.all(collectedArticles.slice(i, i + 5).map(validateAndFixUrl));
-      validated.push(...batch.filter(Boolean));
-    }
+    // Parallel validate (concurrency 15), then dedup by final resolved URL.
+    const validated: any[] = [];
+    const finalSeen = new Set<string>();
+    await runWithLimit(collectedArticles, 15, async (a) => {
+      const v = await validateAndFixUrl(a);
+      if (!v) return;
+      const key = normalizeUrl(v.url);
+      if (!key || finalSeen.has(key)) return;
+      finalSeen.add(key);
+      validated.push(v);
+    });
 
     console.log(`Validated: ${validated.length}`);
 
