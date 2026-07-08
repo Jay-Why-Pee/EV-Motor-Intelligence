@@ -260,7 +260,6 @@ Rules:
     ];
 
     // MAJOR companies to actively seed via targeted Google News RSS.
-    // Priority: Motor Manufacturers (Tier-1 suppliers) + top OEM customers.
     const MAJOR_MANUFACTURERS = [
       'Bosch', 'ZF', 'Schaeffler', 'LG Magna', 'Denso', 'Magna',
       'Hyundai Mobis', 'AISIN', 'BorgWarner', 'Hitachi Astemo',
@@ -269,16 +268,18 @@ Rules:
     const MAJOR_OEMS = [
       'Tesla', 'BYD', 'Hyundai', 'GM', 'Ford', 'Volkswagen',
       'Mercedes-Benz', 'BMW', 'Toyota', 'Stellantis', 'Xiaomi', 'Geely',
+      'Honda', 'Nissan', 'Renault',
     ];
 
     const buildGoogleNewsRss = (q: string) =>
-      `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
+      `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en&when:180d`;
 
-    // Give Motor Manufacturers 2x weight vs OEMs
+    // Give Motor Manufacturers 3x weight (3 queries each) vs OEMs (1 query each)
     const majorFeeds = [
       ...MAJOR_MANUFACTURERS.flatMap((c) => [
-        { name: `GN:${c} motor`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR EV)`) },
-        { name: `GN:${c} EV`, url: buildGoogleNewsRss(`"${c}" (EV drive unit OR inverter OR "electric drive")`) },
+        { name: `GN:${c} motor`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-motor)`) },
+        { name: `GN:${c} eaxle`, url: buildGoogleNewsRss(`"${c}" (e-axle OR "drive unit" OR "EV drive")`) },
+        { name: `GN:${c} EV`, url: buildGoogleNewsRss(`"${c}" (inverter OR "electric drive" OR EV powertrain)`) },
       ]),
       ...MAJOR_OEMS.map((c) => (
         { name: `GN:${c}`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR "drive unit")`) }
@@ -305,7 +306,7 @@ Rules:
         const xml = await res.text();
         const items = parseRssItems(xml);
         for (const item of items.slice(0, perFeedCap)) {
-          if (collectedArticles.length >= 500) return;
+          if (collectedArticles.length >= 800) return;
           let url = normalizeUrl(item.url);
           if (!url) continue;
           if (feed.name.startsWith('GN:')) url = normalizeUrl(await resolveGoogleNews(url));
@@ -316,16 +317,16 @@ Rules:
       } catch {}
     };
 
-    // 1) Seed from major-company targeted queries FIRST (priority)
+    // 1) Seed from major-company targeted queries FIRST (priority) — bigger cap
     for (const feed of majorFeeds) {
-      if (collectedArticles.length >= 400) break;
+      if (collectedArticles.length >= 700) break;
       console.log(`Fetching (major): ${feed.name}`);
-      await ingestFeed(feed, 8);
+      await ingestFeed(feed, 20);
     }
 
     // 2) Fill with generic EV feeds
     for (const feed of feeds) {
-      if (collectedArticles.length >= 500) break;
+      if (collectedArticles.length >= 800) break;
       console.log(`Fetching: ${feed.name}`);
       await ingestFeed(feed, 40);
     }
