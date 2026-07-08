@@ -114,8 +114,7 @@ serve(async (req) => {
           }
         ],
         response_format: { type: "json_object" },
-        temperature: 0.4,
-        max_tokens: 8192,
+        max_completion_tokens: 8192,
       }),
     });
 
