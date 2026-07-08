@@ -252,7 +252,7 @@ Rules:
           for (const cls of result.results || []) {
             const article = batch[cls.index];
             if (article) {
-              const categories = Array.isArray(cls.categories) && cls.categories.length > 0 ? cls.categories : ["Other"];
+              const categories = normalizeCategories(cls.categories);
               processed.push({ ...article, category: categories, title_kr: cls.title_kr || article.title });
             }
           }
