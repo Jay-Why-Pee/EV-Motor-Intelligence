@@ -292,12 +292,11 @@ Rules:
     const buildGoogleNewsRss = (q: string) =>
       `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en&when:180d`;
 
-    // Give Motor Manufacturers 3x weight (3 queries each) vs OEMs (1 query each)
+    // 2 targeted queries per manufacturer + 1 per OEM
     const majorFeeds = [
       ...MAJOR_MANUFACTURERS.flatMap((c) => [
-        { name: `GN:${c} motor`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-motor)`) },
-        { name: `GN:${c} eaxle`, url: buildGoogleNewsRss(`"${c}" (e-axle OR "drive unit" OR "EV drive")`) },
-        { name: `GN:${c} EV`, url: buildGoogleNewsRss(`"${c}" (inverter OR "electric drive" OR EV powertrain)`) },
+        { name: `GN:${c} motor`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-motor OR e-axle)`) },
+        { name: `GN:${c} EV`, url: buildGoogleNewsRss(`"${c}" ("drive unit" OR inverter OR "EV drive" OR "electric drive")`) },
       ]),
       ...MAJOR_OEMS.map((c) => (
         { name: `GN:${c}`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR "drive unit")`) }
@@ -307,27 +306,29 @@ Rules:
     const collectedArticles: any[] = [];
     const seenUrls = new Set<string>();
 
-    // Google News RSS returns wrapper URLs — resolve to publisher URL.
-    const resolveGoogleNews = async (u: string): Promise<string> => {
-      try {
-        const host = new URL(u).hostname.toLowerCase();
-        if (!host.includes('news.google.com') && !host.includes('google.com')) return u;
-        const r = await fetchWithTimeout(u, { redirect: 'follow' }, 8000);
-        return r?.url || u;
-      } catch { return u; }
+    // Parallel fetch of all RSS feed XMLs with a concurrency limit.
+    // Skip Google News redirect resolution here — validateAndFixUrl follows
+    // redirects and returns the final publisher URL, so we dedup post-validate.
+    const runWithLimit = async <T,>(items: T[], limit: number, worker: (t: T) => Promise<void>) => {
+      let idx = 0;
+      const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (idx < items.length) {
+          const my = idx++;
+          await worker(items[my]);
+        }
+      });
+      await Promise.all(runners);
     };
 
-    const ingestFeed = async (feed: { name: string; url: string }, perFeedCap: number) => {
+    const fetchFeedItems = async (feed: { name: string; url: string }, perFeedCap: number) => {
       try {
         const res = await fetchWithTimeout(feed.url, {}, 10000);
         if (!res.ok) return;
         const xml = await res.text();
-        const items = parseRssItems(xml);
-        for (const item of items.slice(0, perFeedCap)) {
+        const items = parseRssItems(xml).slice(0, perFeedCap);
+        for (const item of items) {
           if (collectedArticles.length >= 800) return;
-          let url = normalizeUrl(item.url);
-          if (!url) continue;
-          if (feed.name.startsWith('GN:')) url = normalizeUrl(await resolveGoogleNews(url));
+          const url = normalizeUrl(item.url);
           if (!url || seenUrls.has(url)) continue;
           seenUrls.add(url);
           collectedArticles.push({ ...item, url, source: feed.name.startsWith('GN:') ? feed.name.slice(3) : feed.name });
@@ -335,19 +336,13 @@ Rules:
       } catch {}
     };
 
-    // 1) Seed from major-company targeted queries FIRST (priority) — bigger cap
-    for (const feed of majorFeeds) {
-      if (collectedArticles.length >= 700) break;
-      console.log(`Fetching (major): ${feed.name}`);
-      await ingestFeed(feed, 20);
-    }
+    console.log(`Fetching ${majorFeeds.length} major-company feeds in parallel...`);
+    await runWithLimit(majorFeeds, 8, (f) => fetchFeedItems(f, 15));
+    console.log(`After major feeds: ${collectedArticles.length}`);
 
-    // 2) Fill with generic EV feeds
-    for (const feed of feeds) {
-      if (collectedArticles.length >= 800) break;
-      console.log(`Fetching: ${feed.name}`);
-      await ingestFeed(feed, 40);
-    }
+    console.log(`Fetching ${feeds.length} generic feeds in parallel...`);
+    await runWithLimit(feeds, 6, (f) => fetchFeedItems(f, 40));
+
 
     console.log(`Collected: ${collectedArticles.length}`);
 
