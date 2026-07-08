@@ -107,9 +107,17 @@ serve(async (req) => {
         let summary = extractMetaDescription(html) || article.summary || article.title;
         summary = clampSummary(decodeHtml(stripHtml(summary)), 260);
 
-        const text = decodeHtml(stripHtml(html)).toLowerCase();
-        const titleHint = article.title.toLowerCase().replace(/[^a-z0-9가-힣\s]/gi, ' ').replace(/\s+/g, ' ').trim();
-        if (titleHint.length >= 8 && !text.includes(titleHint.slice(0, Math.min(titleHint.length, 80)))) return null;
+        // Loose title match: require ≥3 of first 5 significant words to appear
+        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9가-힣\s]/gi, ' ').replace(/\s+/g, ' ').trim();
+        const text = norm(decodeHtml(stripHtml(html)));
+        const titleHint = norm(article.title);
+        if (titleHint.length >= 12) {
+          const words = titleHint.split(' ').filter(w => w.length >= 3).slice(0, 5);
+          if (words.length >= 3) {
+            const hits = words.filter(w => text.includes(w)).length;
+            if (hits < 3) return null;
+          }
+        }
 
         return { ...article, url: finalUrl, summary, linkVerified: true, linkStatus: res.status, linkBlockedReason: null };
       } catch {
