@@ -346,11 +346,17 @@ Rules:
 
     console.log(`Collected: ${collectedArticles.length}`);
 
-    const validated = [];
-    for (let i = 0; i < collectedArticles.length; i += 5) {
-      const batch = await Promise.all(collectedArticles.slice(i, i + 5).map(validateAndFixUrl));
-      validated.push(...batch.filter(Boolean));
-    }
+    // Parallel validate (concurrency 15), then dedup by final resolved URL.
+    const validated: any[] = [];
+    const finalSeen = new Set<string>();
+    await runWithLimit(collectedArticles, 15, async (a) => {
+      const v = await validateAndFixUrl(a);
+      if (!v) return;
+      const key = normalizeUrl(v.url);
+      if (!key || finalSeen.has(key)) return;
+      finalSeen.add(key);
+      validated.push(v);
+    });
 
     console.log(`Validated: ${validated.length}`);
 
