@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.change-site-password]
 verify_jwt = false
+
+[functions.reclassify-news]
+verify_jwt = false
