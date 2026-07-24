@@ -466,7 +466,10 @@ Rules:
           const url = normalizeUrl(item.url);
           if (!url || seenUrls.has(url)) continue;
           seenUrls.add(url);
-          collectedArticles.push({ ...item, url, source: feed.name.startsWith('GN:') ? feed.name.slice(3) : feed.name });
+          const src = feed.name.startsWith('GN:') ? feed.name.slice(3)
+                    : feed.name.startsWith('BN:') ? feed.name.slice(3).replace(/ (motor|EV)$/,'')
+                    : feed.name;
+          collectedArticles.push({ ...item, url, source: src });
         }
       } catch {}
     };
