@@ -79,6 +79,19 @@ Deno.serve(async (req) => {
   let scanned = 0;
   let updated = 0;
 
+  const MOTOR_TERMS = /\b(traction\s+motor|electric\s+motor|e-?motor|e-?axle|e-?drive|drive\s+unit|motor\s+(design|efficiency|winding|rotor|stator)|hairpin|IPMSM|PMSM|axial\s+flux|induction\s+motor|permanent\s+magnet|EV\s+powertrain|inverter\s+and\s+motor|electric\s+drivetrain)\b/i;
+  const BATTERY_ONLY = /\b(battery\s+cell|cell\s+chemistry|4680|21700|LFP|NMC|solid[-\s]state|gigafactory|charging\s+station|charger\s+network|supercharger)\b/i;
+  const MAX_TAGS = 5;
+  const REGIONS = new Set(["Asia","Europe","North America","China"]);
+  const capCategories = (cats: string[]): string[] => {
+    const companies = cats.filter(c => !REGIONS.has(c));
+    const regs = cats.filter(c => REGIONS.has(c));
+    const kept = [...companies.slice(0, MAX_TAGS - Math.min(regs.length, 2)), ...regs.slice(0, 2)];
+    return Array.from(new Set(kept)).slice(0, MAX_TAGS);
+  };
+
+  let deleted = 0;
+
   while (true) {
     const { data, error } = await supabase
       .from('news')
@@ -90,16 +103,22 @@ Deno.serve(async (req) => {
 
     for (const row of data) {
       scanned++;
+      const text = `${row.title || ''} ${row.title_kr || ''} ${row.summary || ''}`;
       const ruleTags = applyRuleTags(row as any);
+
+      // Delete battery/charging-only articles with no motor context.
+      if (BATTERY_ONLY.test(text) && !MOTOR_TERMS.test(text)) {
+        const { error: delErr } = await supabase.from('news').delete().eq('id', row.id);
+        if (!delErr) deleted++;
+        continue;
+      }
+
+      // Categories = rule tags only. Drops any hallucinated AI tags.
+      const filtered = ruleTags.filter(c => CATEGORY_WHITELIST.has(c));
+      const finalTags = filtered.length ? capCategories(filtered) : ['Other'];
       const existing = Array.isArray(row.category) ? row.category : [];
-      const merged = new Set<string>([...existing, ...ruleTags].filter(c => CATEGORY_WHITELIST.has(c)));
-      // If any real tag exists, drop "Other"
-      if (merged.size > 1) merged.delete('Other');
-      if (merged.size === 0) merged.add('Other');
-      const next = Array.from(merged).sort();
-      const prev = [...existing].sort();
-      if (JSON.stringify(prev) !== JSON.stringify(next)) {
-        const { error: upErr } = await supabase.from('news').update({ category: next }).eq('id', row.id);
+      if (JSON.stringify([...existing].sort()) !== JSON.stringify([...finalTags].sort())) {
+        const { error: upErr } = await supabase.from('news').update({ category: finalTags }).eq('id', row.id);
         if (!upErr) updated++;
       }
     }
@@ -108,7 +127,7 @@ Deno.serve(async (req) => {
     offset += page;
   }
 
-  return new Response(JSON.stringify({ scanned, updated }), {
+  return new Response(JSON.stringify({ scanned, updated, deleted }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });
