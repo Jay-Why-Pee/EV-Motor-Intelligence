@@ -166,19 +166,33 @@ serve(async (req) => {
         const sourceUrlMatch = itemXml.match(/<source[^>]*\burl=["']([^"']+)["']/i);
         const sourceUrl = sourceUrlMatch ? sourceUrlMatch[1] : '';
 
+        // Bing News wrapper: bing.com/news/apiclick.aspx?...&url=<encoded publisher URL>
+        if (link && /bing\.com\/news\/apiclick/i.test(link)) {
+          try {
+            const u = new URL(link);
+            const real = u.searchParams.get('url');
+            if (real && /^https?:\/\//i.test(real) && !/bing\.com/i.test(real)) link = real;
+          } catch {}
+        }
+
         // If Google News wrapper, try to unwrap to real publisher URL
         if (link && /news\.google\.com\/rss\/articles\//i.test(link)) {
           const decoded = decodeGoogleNewsUrl(link);
           if (decoded) {
             link = decoded;
-          } else if (sourceUrl && /^https?:\/\//i.test(sourceUrl) && !/news\.google\.com/i.test(sourceUrl)) {
-            link = sourceUrl;
           } else {
-            // Last resort: pull first http URL from description
-            const descUrl = (description || '').match(/https?:\/\/[^\s"'<>)]+/i);
-            if (descUrl && !/news\.google\.com/i.test(descUrl[0])) link = descUrl[0];
+            // Last resort: pull first non-google http URL from description
+            const descUrl = (description || '').match(/https?:\/\/(?!news\.google\.com)[^\s"'<>)]+/i);
+            if (descUrl) link = descUrl[0];
+            else if (sourceUrl && /^https?:\/\//i.test(sourceUrl) && !/news\.google\.com/i.test(sourceUrl)) {
+              // sourceUrl is only a domain root — skip (would land on homepage)
+              link = '';
+            } else {
+              link = '';
+            }
           }
         }
+
 
         if (title && link) {
           let formattedDate = new Date().toISOString().split('T')[0];
