@@ -98,24 +98,46 @@ serve(async (req) => {
 
       try {
         const res = await fetchWithTimeout(original, { method: 'GET', redirect: 'follow' }, 10000).catch(() => null as any);
-        if (!res || !res.ok || res.status >= 400) return null;
+        if (!res || !res.ok || res.status >= 400) { try { res && await res.body?.cancel(); } catch {} return null; }
         const finalUrl = res.url || original;
-        if (isWrapperUrl(finalUrl)) return null;
+        if (isWrapperUrl(finalUrl)) { try { await res.body?.cancel(); } catch {} return null; }
 
-        const html = await res.text();
+        // Stream only first ~300KB — enough for <head> meta + first content — to bound memory
+        const reader = res.body?.getReader();
+        let received = 0;
+        const chunks: Uint8Array[] = [];
+        const MAX = 300 * 1024;
+        if (reader) {
+          while (received < MAX) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+          }
+          try { await reader.cancel(); } catch {}
+        }
+        const html = new TextDecoder('utf-8', { fatal: false }).decode(
+          chunks.length === 1 ? chunks[0] : (() => {
+            const out = new Uint8Array(received);
+            let o = 0; for (const c of chunks) { out.set(c.subarray(0, Math.min(c.length, received - o)), o); o += c.length; if (o >= received) break; }
+            return out;
+          })()
+        );
+        chunks.length = 0;
+
         if (isBlockedHtml(html)) return null;
         let summary = extractMetaDescription(html) || article.summary || article.title;
         summary = clampSummary(decodeHtml(stripHtml(summary)), 260);
 
-        // Loose title match: require ≥3 of first 5 significant words to appear
+        // Loose title match on head+first content only
         const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9가-힣\s]/gi, ' ').replace(/\s+/g, ' ').trim();
-        const text = norm(decodeHtml(stripHtml(html)));
+        const text = norm(decodeHtml(stripHtml(html.slice(0, 100_000))));
         const titleHint = norm(article.title);
         if (titleHint.length >= 12) {
           const words = titleHint.split(' ').filter(w => w.length >= 3).slice(0, 5);
           if (words.length >= 3) {
             const hits = words.filter(w => text.includes(w)).length;
-            if (hits < 3) return null;
+            if (hits < 2) return null;
           }
         }
 
@@ -124,6 +146,7 @@ serve(async (req) => {
         return null;
       }
     };
+
 
     const decodeGoogleNewsUrl = (url: string): string | null => {
       try {
