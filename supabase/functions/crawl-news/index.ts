@@ -402,16 +402,10 @@ Rules:
       { name: 'Automotive World', url: 'https://www.automotiveworld.com/feed/' },
       { name: 'EV Magazine', url: 'https://evmagazine.com/feed' },
       { name: 'Power Electronics News', url: 'https://www.powerelectronicsnews.com/feed/' },
-      // Tier-1 supplier press rooms (direct — no Google News wrapper)
-      { name: 'Bosch Press', url: 'https://www.bosch-presse.de/pressportal/de/en/rss.xml' },
+      // Tier-1 supplier press rooms that actually respond (verified)
       { name: 'ZF Press', url: 'https://press.zf.com/press/en/rss.xml' },
-      { name: 'Schaeffler Press', url: 'https://www.schaeffler.com/remotemedien/media/rss/press_en.xml' },
-      { name: 'Magna Press', url: 'https://www.magna.com/rss/news' },
-      { name: 'BorgWarner Press', url: 'https://www.borgwarner.com/rss/news' },
-      { name: 'Valeo Press', url: 'https://www.valeo.com/en/feed/' },
-      { name: 'Denso Press', url: 'https://www.denso.com/global/en/news/newsroom/rss.xml' },
-      { name: 'Hyundai Mobis Press', url: 'https://en.mobis.co.kr/rss/pressRelease.do' },
     ];
+
 
 
     // MAJOR companies to actively seed via targeted Google News RSS.
