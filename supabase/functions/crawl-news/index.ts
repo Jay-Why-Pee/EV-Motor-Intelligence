@@ -98,24 +98,46 @@ serve(async (req) => {
 
       try {
         const res = await fetchWithTimeout(original, { method: 'GET', redirect: 'follow' }, 10000).catch(() => null as any);
-        if (!res || !res.ok || res.status >= 400) return null;
+        if (!res || !res.ok || res.status >= 400) { try { res && await res.body?.cancel(); } catch {} return null; }
         const finalUrl = res.url || original;
-        if (isWrapperUrl(finalUrl)) return null;
+        if (isWrapperUrl(finalUrl)) { try { await res.body?.cancel(); } catch {} return null; }
 
-        const html = await res.text();
+        // Stream only first ~300KB — enough for <head> meta + first content — to bound memory
+        const reader = res.body?.getReader();
+        let received = 0;
+        const chunks: Uint8Array[] = [];
+        const MAX = 300 * 1024;
+        if (reader) {
+          while (received < MAX) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+          }
+          try { await reader.cancel(); } catch {}
+        }
+        const html = new TextDecoder('utf-8', { fatal: false }).decode(
+          chunks.length === 1 ? chunks[0] : (() => {
+            const out = new Uint8Array(received);
+            let o = 0; for (const c of chunks) { out.set(c.subarray(0, Math.min(c.length, received - o)), o); o += c.length; if (o >= received) break; }
+            return out;
+          })()
+        );
+        chunks.length = 0;
+
         if (isBlockedHtml(html)) return null;
         let summary = extractMetaDescription(html) || article.summary || article.title;
         summary = clampSummary(decodeHtml(stripHtml(summary)), 260);
 
-        // Loose title match: require ≥3 of first 5 significant words to appear
+        // Loose title match on head+first content only
         const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9가-힣\s]/gi, ' ').replace(/\s+/g, ' ').trim();
-        const text = norm(decodeHtml(stripHtml(html)));
+        const text = norm(decodeHtml(stripHtml(html.slice(0, 100_000))));
         const titleHint = norm(article.title);
         if (titleHint.length >= 12) {
           const words = titleHint.split(' ').filter(w => w.length >= 3).slice(0, 5);
           if (words.length >= 3) {
             const hits = words.filter(w => text.includes(w)).length;
-            if (hits < 3) return null;
+            if (hits < 2) return null;
           }
         }
 
@@ -123,6 +145,28 @@ serve(async (req) => {
       } catch {
         return null;
       }
+    };
+
+
+    const decodeGoogleNewsUrl = (url: string): string | null => {
+      try {
+        const m = url.match(/\/rss\/articles\/([^?/]+)/);
+        if (!m) return null;
+        let b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        const bin = atob(b64);
+        const idx = bin.indexOf('http');
+        if (idx < 0) return null;
+        let end = idx;
+        while (end < bin.length) {
+          const c = bin.charCodeAt(end);
+          if (c < 32 || c > 126) break;
+          end++;
+        }
+        const candidate = bin.slice(idx, end);
+        if (/^https?:\/\/[^\s]+/i.test(candidate)) return candidate;
+        return null;
+      } catch { return null; }
     };
 
     const parseRssItems = (xml: string) => {
@@ -137,9 +181,41 @@ serve(async (req) => {
         };
 
         const title = getTag('title');
-        const link = getTag('link') || getTag('guid');
+        let link = getTag('link') || getTag('guid');
         const pubDate = getTag('pubDate') || getTag('published');
         const description = getTag('description');
+
+        // Extract <source url="..."> attribute (Google News includes publisher URL here)
+        const sourceUrlMatch = itemXml.match(/<source[^>]*\burl=["']([^"']+)["']/i);
+        const sourceUrl = sourceUrlMatch ? sourceUrlMatch[1] : '';
+
+        // Bing News wrapper: bing.com/news/apiclick.aspx?...&url=<encoded publisher URL>
+        if (link && /bing\.com\/news\/apiclick/i.test(link)) {
+          try {
+            const u = new URL(link);
+            const real = u.searchParams.get('url');
+            if (real && /^https?:\/\//i.test(real) && !/bing\.com/i.test(real)) link = real;
+          } catch {}
+        }
+
+        // If Google News wrapper, try to unwrap to real publisher URL
+        if (link && /news\.google\.com\/rss\/articles\//i.test(link)) {
+          const decoded = decodeGoogleNewsUrl(link);
+          if (decoded) {
+            link = decoded;
+          } else {
+            // Last resort: pull first non-google http URL from description
+            const descUrl = (description || '').match(/https?:\/\/(?!news\.google\.com)[^\s"'<>)]+/i);
+            if (descUrl) link = descUrl[0];
+            else if (sourceUrl && /^https?:\/\//i.test(sourceUrl) && !/news\.google\.com/i.test(sourceUrl)) {
+              // sourceUrl is only a domain root — skip (would land on homepage)
+              link = '';
+            } else {
+              link = '';
+            }
+          }
+        }
+
 
         if (title && link) {
           let formattedDate = new Date().toISOString().split('T')[0];
@@ -152,6 +228,7 @@ serve(async (req) => {
       }
       return items;
     };
+
 
     const CATEGORY_WHITELIST = new Set([
       "Asia","Europe","North America","China","GM","Ford","Mercedes-Benz","BMW","Volkswagen","Honda","Hyundai","Stellantis","Toyota","Tesla","Nissan","Renault","BYD","Xiaomi","Geely","Bosch","ZF","Schaeffler","LG Magna","Denso","Magna","Hyundai Mobis","AISIN","BorgWarner","Hitachi Astemo","Other"
@@ -171,13 +248,69 @@ serve(async (req) => {
       return uniq.length > 0 ? uniq : ["Other"];
     };
 
+    // Deterministic rule-based tagger — runs BEFORE AI. Guarantees supplier
+    // and OEM tagging when name/URL matches, so short RSS summaries can't hide them.
+    const COMPANY_RULES: { cat: string; pattern: RegExp; domains?: string[] }[] = [
+      { cat: "Bosch",           pattern: /\bBosch\b/i,                                 domains: ["bosch.com","bosch-mobility.com","bosch-presse.de"] },
+      { cat: "ZF",              pattern: /\bZF\s+(Friedrichshafen|Group|AG)\b|\bZF\b(?=\s+(said|announced|develops|unveil|supplies|launched|partners|acquires|invests|will|has|is|to|electric|e-drive|drive))|(?<=\bfrom\s)ZF\b|(?<=\bby\s)ZF\b/i, domains: ["zf.com","press.zf.com"] },
+      { cat: "Schaeffler",      pattern: /\bSchaeffler\b/i,                            domains: ["schaeffler.com"] },
+      { cat: "LG Magna",        pattern: /\bLG\s*Magna\b|\bLG\s+Magna\s+e-?Powertrain\b/i },
+      { cat: "Denso",           pattern: /\bDenso\b/i,                                 domains: ["denso.com"] },
+      { cat: "Magna",           pattern: /\bMagna\s+International\b|\bMagna\b(?!\s*Carta)/i, domains: ["magna.com"] },
+      { cat: "Hyundai Mobis",   pattern: /\bHyundai\s+Mobis\b|\bMobis\b/i,             domains: ["mobis.com","mobis.co.kr"] },
+      { cat: "AISIN",           pattern: /\bAisin\b/i,                                 domains: ["aisin.com"] },
+      { cat: "BorgWarner",      pattern: /\bBorg\s*Warner\b/i,                         domains: ["borgwarner.com"] },
+      { cat: "Hitachi Astemo",  pattern: /\bHitachi\s+Astemo\b/i,                      domains: ["hitachiastemo.com"] },
+      // OEMs
+      { cat: "Tesla",           pattern: /\bTesla\b/i,                                 domains: ["tesla.com"] },
+      { cat: "BYD",             pattern: /\bBYD\b/i },
+      { cat: "Hyundai",         pattern: /\bHyundai\b|\bKia\b|\bGenesis\b/i,           domains: ["hyundai.com","kia.com"] },
+      { cat: "GM",              pattern: /\bGeneral\s+Motors\b|\bGM\b|\bChevrolet\b|\bCadillac\b|\bGMC\b/i, domains: ["gm.com"] },
+      { cat: "Ford",            pattern: /\bFord\b/i,                                  domains: ["ford.com"] },
+      { cat: "Volkswagen",      pattern: /\bVolkswagen\b|\bVW\b|\bAudi\b|\bPorsche\b|\bSkoda\b|\bSEAT\b/i, domains: ["volkswagen.com","vw.com"] },
+      { cat: "Mercedes-Benz",   pattern: /\bMercedes(-Benz)?\b|\bDaimler\b/i,          domains: ["mercedes-benz.com"] },
+      { cat: "BMW",             pattern: /\bBMW\b|\bMINI\b/i,                          domains: ["bmw.com","bmwgroup.com"] },
+      { cat: "Toyota",          pattern: /\bToyota\b|\bLexus\b/i,                      domains: ["toyota.com"] },
+      { cat: "Stellantis",      pattern: /\bStellantis\b|\bJeep\b|\bChrysler\b|\bDodge\b|\bRam\b|\bFiat\b|\bPeugeot\b|\bCitro[eë]n\b|\bOpel\b|\bMaserati\b|\bAlfa\s+Romeo\b/i, domains: ["stellantis.com"] },
+      { cat: "Nissan",          pattern: /\bNissan\b|\bInfiniti\b/i,                   domains: ["nissan.com"] },
+      { cat: "Renault",         pattern: /\bRenault\b/i,                               domains: ["renault.com"] },
+      { cat: "Honda",           pattern: /\bHonda\b|\bAcura\b/i,                       domains: ["honda.com"] },
+      { cat: "Xiaomi",          pattern: /\bXiaomi\b/i },
+      { cat: "Geely",           pattern: /\bGeely\b|\bZeekr\b|\bLynk\s*&\s*Co\b|\bPolestar\b|\bVolvo\s+Cars?\b/i },
+    ];
+    const REGION_RULES: { cat: string; pattern: RegExp }[] = [
+      { cat: "China",         pattern: /\bChina\b|\bChinese\b|\bBeijing\b|\bShanghai\b|\bShenzhen\b/i },
+      { cat: "North America", pattern: /\b(U\.?S\.?A?|United\s+States|America(n)?|Canada|Mexico|Detroit|Michigan|California|Texas)\b/i },
+      { cat: "Europe",        pattern: /\bEurope(an)?|Germany|German|France|French|UK|Britain|British|Italy|Spain|Netherlands|Sweden|Norway|EU\b/i },
+      { cat: "Asia",          pattern: /\bJapan(ese)?|Korea(n)?|Seoul|Tokyo|Taiwan|India(n)?|Vietnam|Thailand/i },
+    ];
+
+    const applyRuleTags = (article: { title: string; summary?: string; url?: string }): string[] => {
+      const text = `${article.title || ''} ${article.summary || ''}`;
+      let host = '';
+      try { host = new URL(article.url || '').hostname.toLowerCase(); } catch {}
+      const tags = new Set<string>();
+      for (const r of COMPANY_RULES) {
+        if (r.pattern.test(text)) tags.add(r.cat);
+        else if (host && r.domains && r.domains.some(d => host === d || host.endsWith('.' + d))) tags.add(r.cat);
+      }
+      for (const r of REGION_RULES) {
+        if (r.pattern.test(text)) tags.add(r.cat);
+      }
+      return Array.from(tags);
+    };
+
     const classifyAndTranslate = async (articles: any[]) => {
       const batchSize = 10;
       const processed: any[] = [];
-      
+
+      // Pre-compute rule tags for every article
+      const ruleTagsByIndex = articles.map(applyRuleTags);
+
       for (let i = 0; i < articles.length; i += batchSize) {
         const batch = articles.slice(i, i + batchSize);
-        
+        const batchRuleTags = ruleTagsByIndex.slice(i, i + batchSize);
+
         try {
           const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
@@ -195,16 +328,18 @@ serve(async (req) => {
 Categories: Asia, Europe, North America, China, GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely, Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo, Other
 
 Rules:
-- MULTI-tag: assign every relevant company + region category. Do NOT be conservative — if a company is mentioned in a substantive context (product, partnership, financials, tech), tag it.
-- STRONG PRIORITY on Motor Manufacturers (Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo) — tag them whenever the article touches their motor / e-axle / drive-unit / inverter business, even as a supplier mention.
-- Also prioritize major OEM customers (GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely).
-- Use "Other" ONLY when no listed company OR region applies.
-- Example: Mercedes EV article in Europe → ["Europe", "Mercedes-Benz"]
-- Example: Bosch supplying motors to Ford in the US → ["North America", "Bosch", "Ford"]`
+- Each article comes with "confirmed_tags" already validated by keyword/domain matching. You MUST keep every confirmed tag AND add any additional relevant categories.
+- MULTI-tag: assign every relevant company + region. If a supplier (Bosch/ZF/Schaeffler/LG Magna/Denso/Magna/Hyundai Mobis/AISIN/BorgWarner/Hitachi Astemo) is mentioned in any substantive way (product, tech, partnership, financials, supply), tag it.
+- Use "Other" ONLY when no company AND no region applies.`
                 },
                 {
                   role: "user",
-                  content: JSON.stringify(batch.map((a, idx) => ({ index: idx, title: a.title, summary: a.summary || '' })))
+                  content: JSON.stringify(batch.map((a, idx) => ({
+                    index: idx,
+                    title: a.title,
+                    summary: a.summary || '',
+                    confirmed_tags: batchRuleTags[idx],
+                  })))
                 }
               ],
               tools: [{
@@ -220,10 +355,10 @@ Rules:
                           type: "object",
                           properties: {
                             index: { type: "number" },
-                            categories: { 
+                            categories: {
                               type: "array",
                               items: { type: "string" },
-                              description: "관련된 모든 카테고리 배열"
+                              description: "관련된 모든 카테고리 배열 (confirmed_tags 포함 필수)"
                             },
                             title_kr: { type: "string" }
                           },
@@ -240,31 +375,46 @@ Rules:
           });
 
           if (!response.ok) {
-            for (const article of batch) {
-              processed.push({ ...article, category: ["Other"], title_kr: article.title });
+            for (let j = 0; j < batch.length; j++) {
+              const article = batch[j];
+              const rt = batchRuleTags[j];
+              processed.push({ ...article, category: normalizeCategories(rt.length ? rt : ["Other"]), title_kr: article.title });
             }
             continue;
           }
 
           const data = await response.json();
           const result = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || '{"results":[]}');
-            
+
+          const seenIdx = new Set<number>();
           for (const cls of result.results || []) {
             const article = batch[cls.index];
             if (article) {
-              const categories = normalizeCategories(cls.categories);
-              processed.push({ ...article, category: categories, title_kr: cls.title_kr || article.title });
+              seenIdx.add(cls.index);
+              // Union AI tags with confirmed rule tags — rule tags always win
+              const merged = normalizeCategories([...(cls.categories || []), ...batchRuleTags[cls.index]]);
+              processed.push({ ...article, category: merged, title_kr: cls.title_kr || article.title });
             }
           }
+          // Any batch item missed by AI still gets rule-based tags
+          for (let j = 0; j < batch.length; j++) {
+            if (seenIdx.has(j)) continue;
+            const article = batch[j];
+            const rt = batchRuleTags[j];
+            processed.push({ ...article, category: normalizeCategories(rt.length ? rt : ["Other"]), title_kr: article.title });
+          }
         } catch {
-          for (const article of batch) {
-            processed.push({ ...article, category: ["Other"], title_kr: article.title });
+          for (let j = 0; j < batch.length; j++) {
+            const article = batch[j];
+            const rt = batchRuleTags[j];
+            processed.push({ ...article, category: normalizeCategories(rt.length ? rt : ["Other"]), title_kr: article.title });
           }
         }
       }
-      
+
       return processed;
     };
+
 
     const feeds = [
       { name: 'Electrek', url: 'https://electrek.co/feed/' },
@@ -275,9 +425,16 @@ Rules:
       { name: 'Automotive World', url: 'https://www.automotiveworld.com/feed/' },
       { name: 'EV Magazine', url: 'https://evmagazine.com/feed' },
       { name: 'Power Electronics News', url: 'https://www.powerelectronicsnews.com/feed/' },
+      // Tier-1 supplier press rooms that actually respond (verified)
+      { name: 'ZF Press', url: 'https://press.zf.com/press/en/rss.xml' },
     ];
 
-    // MAJOR companies to actively seed via targeted Google News RSS.
+
+
+    // MAJOR companies to actively seed via targeted Bing News RSS.
+    // Bing News wraps publisher URLs in bing.com/news/apiclick.aspx?url=<encoded>,
+    // which our parser decodes back to the real URL. Google News tokens
+    // (2024+) are opaque and cannot be decoded server-side, so we use Bing.
     const MAJOR_MANUFACTURERS = [
       'Bosch', 'ZF', 'Schaeffler', 'LG Magna', 'Denso', 'Magna',
       'Hyundai Mobis', 'AISIN', 'BorgWarner', 'Hitachi Astemo',
@@ -289,19 +446,20 @@ Rules:
       'Honda', 'Nissan', 'Renault',
     ];
 
-    const buildGoogleNewsRss = (q: string) =>
-      `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en&when:180d`;
+    const buildBingNewsRss = (q: string) =>
+      `https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss&count=25`;
 
     // 2 targeted queries per manufacturer + 1 per OEM
     const majorFeeds = [
       ...MAJOR_MANUFACTURERS.flatMap((c) => [
-        { name: `GN:${c} motor`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-motor OR e-axle)`) },
-        { name: `GN:${c} EV`, url: buildGoogleNewsRss(`"${c}" ("drive unit" OR inverter OR "EV drive" OR "electric drive")`) },
+        { name: `BN:${c} motor`, url: buildBingNewsRss(`"${c}" (electric motor OR traction motor OR e-motor OR e-axle)`) },
+        { name: `BN:${c} EV`, url: buildBingNewsRss(`"${c}" ("drive unit" OR inverter OR "EV drive" OR "electric drive")`) },
       ]),
       ...MAJOR_OEMS.map((c) => (
-        { name: `GN:${c}`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR "drive unit")`) }
+        { name: `BN:${c}`, url: buildBingNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR "drive unit")`) }
       )),
     ];
+
 
     const collectedArticles: any[] = [];
     const seenUrls = new Set<string>();
@@ -331,7 +489,10 @@ Rules:
           const url = normalizeUrl(item.url);
           if (!url || seenUrls.has(url)) continue;
           seenUrls.add(url);
-          collectedArticles.push({ ...item, url, source: feed.name.startsWith('GN:') ? feed.name.slice(3) : feed.name });
+          const src = feed.name.startsWith('GN:') ? feed.name.slice(3)
+                    : feed.name.startsWith('BN:') ? feed.name.slice(3).replace(/ (motor|EV)$/,'')
+                    : feed.name;
+          collectedArticles.push({ ...item, url, source: src });
         }
       } catch {}
     };
@@ -341,15 +502,29 @@ Rules:
     console.log(`After major feeds: ${collectedArticles.length}`);
 
     console.log(`Fetching ${feeds.length} generic feeds in parallel...`);
-    await runWithLimit(feeds, 6, (f) => fetchFeedItems(f, 40));
+    await runWithLimit(feeds, 6, (f) => fetchFeedItems(f, 25));
 
 
     console.log(`Collected: ${collectedArticles.length}`);
 
-    // Parallel validate (concurrency 15), then dedup by final resolved URL.
+    // Skip URLs already in DB to avoid re-fetching hundreds of pages we already stored.
+    const collectedUrls = collectedArticles.map(a => a.url);
+    const existingSet = new Set<string>();
+    if (collectedUrls.length > 0) {
+      const { data: existing } = await supabase
+        .from('news')
+        .select('url')
+        .in('url', collectedUrls);
+      for (const r of existing || []) existingSet.add(r.url);
+    }
+    const toValidate = collectedArticles.filter(a => !existingSet.has(a.url)).slice(0, 180);
+    console.log(`To validate (new only): ${toValidate.length}`);
+
+    // Parallel validate (concurrency 4 to stay under memory limit), dedup by final URL.
     const validated: any[] = [];
     const finalSeen = new Set<string>();
-    await runWithLimit(collectedArticles, 15, async (a) => {
+    await runWithLimit(toValidate, 4, async (a) => {
+
       const v = await validateAndFixUrl(a);
       if (!v) return;
       const key = normalizeUrl(v.url);
@@ -359,6 +534,7 @@ Rules:
     });
 
     console.log(`Validated: ${validated.length}`);
+
 
     if (validated.length === 0) {
       return new Response(JSON.stringify({ success: true, upserted: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
