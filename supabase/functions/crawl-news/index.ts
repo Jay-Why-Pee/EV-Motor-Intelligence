@@ -408,7 +408,10 @@ Rules:
 
 
 
-    // MAJOR companies to actively seed via targeted Google News RSS.
+    // MAJOR companies to actively seed via targeted Bing News RSS.
+    // Bing News wraps publisher URLs in bing.com/news/apiclick.aspx?url=<encoded>,
+    // which our parser decodes back to the real URL. Google News tokens
+    // (2024+) are opaque and cannot be decoded server-side, so we use Bing.
     const MAJOR_MANUFACTURERS = [
       'Bosch', 'ZF', 'Schaeffler', 'LG Magna', 'Denso', 'Magna',
       'Hyundai Mobis', 'AISIN', 'BorgWarner', 'Hitachi Astemo',
@@ -420,19 +423,20 @@ Rules:
       'Honda', 'Nissan', 'Renault',
     ];
 
-    const buildGoogleNewsRss = (q: string) =>
-      `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en&when:180d`;
+    const buildBingNewsRss = (q: string) =>
+      `https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss&count=25`;
 
     // 2 targeted queries per manufacturer + 1 per OEM
     const majorFeeds = [
       ...MAJOR_MANUFACTURERS.flatMap((c) => [
-        { name: `GN:${c} motor`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-motor OR e-axle)`) },
-        { name: `GN:${c} EV`, url: buildGoogleNewsRss(`"${c}" ("drive unit" OR inverter OR "EV drive" OR "electric drive")`) },
+        { name: `BN:${c} motor`, url: buildBingNewsRss(`"${c}" (electric motor OR traction motor OR e-motor OR e-axle)`) },
+        { name: `BN:${c} EV`, url: buildBingNewsRss(`"${c}" ("drive unit" OR inverter OR "EV drive" OR "electric drive")`) },
       ]),
       ...MAJOR_OEMS.map((c) => (
-        { name: `GN:${c}`, url: buildGoogleNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR "drive unit")`) }
+        { name: `BN:${c}`, url: buildBingNewsRss(`"${c}" (electric motor OR traction motor OR e-axle OR "drive unit")`) }
       )),
     ];
+
 
     const collectedArticles: any[] = [];
     const seenUrls = new Set<string>();
