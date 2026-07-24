@@ -517,13 +517,14 @@ Rules:
         .in('url', collectedUrls);
       for (const r of existing || []) existingSet.add(r.url);
     }
-    const toValidate = collectedArticles.filter(a => !existingSet.has(a.url)).slice(0, 300);
+    const toValidate = collectedArticles.filter(a => !existingSet.has(a.url)).slice(0, 180);
     console.log(`To validate (new only): ${toValidate.length}`);
 
-    // Parallel validate (concurrency 8 to stay under memory limit), dedup by final URL.
+    // Parallel validate (concurrency 4 to stay under memory limit), dedup by final URL.
     const validated: any[] = [];
     const finalSeen = new Set<string>();
-    await runWithLimit(toValidate, 8, async (a) => {
+    await runWithLimit(toValidate, 4, async (a) => {
+
       const v = await validateAndFixUrl(a);
       if (!v) return;
       const key = normalizeUrl(v.url);
