@@ -125,6 +125,27 @@ serve(async (req) => {
       }
     };
 
+    const decodeGoogleNewsUrl = (url: string): string | null => {
+      try {
+        const m = url.match(/\/rss\/articles\/([^?/]+)/);
+        if (!m) return null;
+        let b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        const bin = atob(b64);
+        const idx = bin.indexOf('http');
+        if (idx < 0) return null;
+        let end = idx;
+        while (end < bin.length) {
+          const c = bin.charCodeAt(end);
+          if (c < 32 || c > 126) break;
+          end++;
+        }
+        const candidate = bin.slice(idx, end);
+        if (/^https?:\/\/[^\s]+/i.test(candidate)) return candidate;
+        return null;
+      } catch { return null; }
+    };
+
     const parseRssItems = (xml: string) => {
       const items: any[] = [];
       const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
@@ -137,9 +158,27 @@ serve(async (req) => {
         };
 
         const title = getTag('title');
-        const link = getTag('link') || getTag('guid');
+        let link = getTag('link') || getTag('guid');
         const pubDate = getTag('pubDate') || getTag('published');
         const description = getTag('description');
+
+        // Extract <source url="..."> attribute (Google News includes publisher URL here)
+        const sourceUrlMatch = itemXml.match(/<source[^>]*\burl=["']([^"']+)["']/i);
+        const sourceUrl = sourceUrlMatch ? sourceUrlMatch[1] : '';
+
+        // If Google News wrapper, try to unwrap to real publisher URL
+        if (link && /news\.google\.com\/rss\/articles\//i.test(link)) {
+          const decoded = decodeGoogleNewsUrl(link);
+          if (decoded) {
+            link = decoded;
+          } else if (sourceUrl && /^https?:\/\//i.test(sourceUrl) && !/news\.google\.com/i.test(sourceUrl)) {
+            link = sourceUrl;
+          } else {
+            // Last resort: pull first http URL from description
+            const descUrl = (description || '').match(/https?:\/\/[^\s"'<>)]+/i);
+            if (descUrl && !/news\.google\.com/i.test(descUrl[0])) link = descUrl[0];
+          }
+        }
 
         if (title && link) {
           let formattedDate = new Date().toISOString().split('T')[0];
@@ -152,6 +191,7 @@ serve(async (req) => {
       }
       return items;
     };
+
 
     const CATEGORY_WHITELIST = new Set([
       "Asia","Europe","North America","China","GM","Ford","Mercedes-Benz","BMW","Volkswagen","Honda","Hyundai","Stellantis","Toyota","Tesla","Nissan","Renault","BYD","Xiaomi","Geely","Bosch","ZF","Schaeffler","LG Magna","Denso","Magna","Hyundai Mobis","AISIN","BorgWarner","Hitachi Astemo","Other"
