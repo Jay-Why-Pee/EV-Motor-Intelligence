@@ -300,16 +300,50 @@ serve(async (req) => {
       return Array.from(tags);
     };
 
+    // Motor-relevance filter: article must be about traction motors / e-drive.
+    // Rejects battery-cell-only, charging-only, software-only pieces.
+    const MOTOR_TERMS = /\b(traction\s+motor|electric\s+motor|e-?motor|e-?axle|e-?drive|drive\s+unit|motor\s+(design|efficiency|winding|rotor|stator)|hairpin|IPMSM|PMSM|axial\s+flux|induction\s+motor|permanent\s+magnet|EV\s+powertrain|inverter\s+and\s+motor|electric\s+drivetrain)\b/i;
+    const BATTERY_ONLY = /\b(battery\s+cell|cell\s+chemistry|4680|21700|LFP|NMC|solid[-\s]state|gigafactory|charging\s+station|charger\s+network|supercharger)\b/i;
+    const isMotorRelevant = (a: { title: string; summary?: string }, ruleTags: string[]): boolean => {
+      const text = `${a.title || ''} ${a.summary || ''}`;
+      if (MOTOR_TERMS.test(text)) return true;
+      // Motor-manufacturer press-room domain match already implies motor context
+      // (rule tags include suppliers). Otherwise reject battery/charging-only.
+      if (BATTERY_ONLY.test(text) && !MOTOR_TERMS.test(text)) return false;
+      // Keep if at least one company tag (from targeted motor query) AND not battery-only.
+      return ruleTags.length > 0;
+    };
+
+    // Categories = deterministic rule tags ONLY. AI is used solely for Korean
+    // translation. This eliminates the hallucination class where the model
+    // stamped the entire whitelist onto a single article.
+    const MAX_TAGS = 5;
+    const capCategories = (cats: string[]): string[] => {
+      // Prefer specific company tags over regions when trimming.
+      const regions = new Set(["Asia","Europe","North America","China"]);
+      const companies = cats.filter(c => !regions.has(c));
+      const regs = cats.filter(c => regions.has(c));
+      const kept = [...companies.slice(0, MAX_TAGS - Math.min(regs.length, 2)), ...regs.slice(0, 2)];
+      return Array.from(new Set(kept)).slice(0, MAX_TAGS);
+    };
+
     const classifyAndTranslate = async (articles: any[]) => {
       const batchSize = 10;
       const processed: any[] = [];
-
-      // Pre-compute rule tags for every article
       const ruleTagsByIndex = articles.map(applyRuleTags);
 
-      for (let i = 0; i < articles.length; i += batchSize) {
-        const batch = articles.slice(i, i + batchSize);
-        const batchRuleTags = ruleTagsByIndex.slice(i, i + batchSize);
+      // Filter first — drop irrelevant articles entirely.
+      const kept: { article: any; ruleTags: string[]; origIdx: number }[] = [];
+      for (let i = 0; i < articles.length; i++) {
+        if (isMotorRelevant(articles[i], ruleTagsByIndex[i])) {
+          kept.push({ article: articles[i], ruleTags: ruleTagsByIndex[i], origIdx: i });
+        }
+      }
+      console.log(`Motor-relevance filter: kept ${kept.length}/${articles.length}`);
+
+      for (let i = 0; i < kept.length; i += batchSize) {
+        const batch = kept.slice(i, i + batchSize);
+        const titleKrMap = new Map<number, string>();
 
         try {
           const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -321,31 +355,13 @@ serve(async (req) => {
             body: JSON.stringify({
               model: "google/gemini-2.5-flash",
               messages: [
-                {
-                  role: "system",
-                  content: `Analyze news articles and select all relevant categories, then translate title to Korean.
-
-Categories: Asia, Europe, North America, China, GM, Ford, Mercedes-Benz, BMW, Volkswagen, Honda, Hyundai, Stellantis, Toyota, Tesla, Nissan, Renault, BYD, Xiaomi, Geely, Bosch, ZF, Schaeffler, LG Magna, Denso, Magna, Hyundai Mobis, AISIN, BorgWarner, Hitachi Astemo, Other
-
-Rules:
-- Each article comes with "confirmed_tags" already validated by keyword/domain matching. You MUST keep every confirmed tag AND add any additional relevant categories.
-- MULTI-tag: assign every relevant company + region. If a supplier (Bosch/ZF/Schaeffler/LG Magna/Denso/Magna/Hyundai Mobis/AISIN/BorgWarner/Hitachi Astemo) is mentioned in any substantive way (product, tech, partnership, financials, supply), tag it.
-- Use "Other" ONLY when no company AND no region applies.`
-                },
-                {
-                  role: "user",
-                  content: JSON.stringify(batch.map((a, idx) => ({
-                    index: idx,
-                    title: a.title,
-                    summary: a.summary || '',
-                    confirmed_tags: batchRuleTags[idx],
-                  })))
-                }
+                { role: "system", content: "Translate each English news title to concise natural Korean. Return JSON only." },
+                { role: "user", content: JSON.stringify(batch.map((b, idx) => ({ index: idx, title: b.article.title }))) }
               ],
               tools: [{
                 type: "function",
                 function: {
-                  name: "classify_articles",
+                  name: "translate_titles",
                   parameters: {
                     type: "object",
                     properties: {
@@ -353,16 +369,8 @@ Rules:
                         type: "array",
                         items: {
                           type: "object",
-                          properties: {
-                            index: { type: "number" },
-                            categories: {
-                              type: "array",
-                              items: { type: "string" },
-                              description: "관련된 모든 카테고리 배열 (confirmed_tags 포함 필수)"
-                            },
-                            title_kr: { type: "string" }
-                          },
-                          required: ["index", "categories", "title_kr"]
+                          properties: { index: { type: "number" }, title_kr: { type: "string" } },
+                          required: ["index", "title_kr"]
                         }
                       }
                     },
@@ -370,45 +378,20 @@ Rules:
                   }
                 }
               }],
-              tool_choice: { type: "function", function: { name: "classify_articles" } }
+              tool_choice: { type: "function", function: { name: "translate_titles" } }
             }),
           });
+          if (response.ok) {
+            const data = await response.json();
+            const parsed = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || '{"results":[]}');
+            for (const r of parsed.results || []) titleKrMap.set(r.index, r.title_kr);
+          }
+        } catch {}
 
-          if (!response.ok) {
-            for (let j = 0; j < batch.length; j++) {
-              const article = batch[j];
-              const rt = batchRuleTags[j];
-              processed.push({ ...article, category: normalizeCategories(rt.length ? rt : ["Other"]), title_kr: article.title });
-            }
-            continue;
-          }
-
-          const data = await response.json();
-          const result = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || '{"results":[]}');
-
-          const seenIdx = new Set<number>();
-          for (const cls of result.results || []) {
-            const article = batch[cls.index];
-            if (article) {
-              seenIdx.add(cls.index);
-              // Union AI tags with confirmed rule tags — rule tags always win
-              const merged = normalizeCategories([...(cls.categories || []), ...batchRuleTags[cls.index]]);
-              processed.push({ ...article, category: merged, title_kr: cls.title_kr || article.title });
-            }
-          }
-          // Any batch item missed by AI still gets rule-based tags
-          for (let j = 0; j < batch.length; j++) {
-            if (seenIdx.has(j)) continue;
-            const article = batch[j];
-            const rt = batchRuleTags[j];
-            processed.push({ ...article, category: normalizeCategories(rt.length ? rt : ["Other"]), title_kr: article.title });
-          }
-        } catch {
-          for (let j = 0; j < batch.length; j++) {
-            const article = batch[j];
-            const rt = batchRuleTags[j];
-            processed.push({ ...article, category: normalizeCategories(rt.length ? rt : ["Other"]), title_kr: article.title });
-          }
+        for (let j = 0; j < batch.length; j++) {
+          const { article, ruleTags } = batch[j];
+          const cats = capCategories(normalizeCategories(ruleTags.length ? ruleTags : ["Other"]));
+          processed.push({ ...article, category: cats, title_kr: titleKrMap.get(j) || article.title });
         }
       }
 
