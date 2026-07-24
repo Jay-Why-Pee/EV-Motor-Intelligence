@@ -479,15 +479,28 @@ Rules:
     console.log(`After major feeds: ${collectedArticles.length}`);
 
     console.log(`Fetching ${feeds.length} generic feeds in parallel...`);
-    await runWithLimit(feeds, 6, (f) => fetchFeedItems(f, 40));
+    await runWithLimit(feeds, 6, (f) => fetchFeedItems(f, 25));
 
 
     console.log(`Collected: ${collectedArticles.length}`);
 
-    // Parallel validate (concurrency 15), then dedup by final resolved URL.
+    // Skip URLs already in DB to avoid re-fetching hundreds of pages we already stored.
+    const collectedUrls = collectedArticles.map(a => a.url);
+    const existingSet = new Set<string>();
+    if (collectedUrls.length > 0) {
+      const { data: existing } = await supabase
+        .from('news')
+        .select('url')
+        .in('url', collectedUrls);
+      for (const r of existing || []) existingSet.add(r.url);
+    }
+    const toValidate = collectedArticles.filter(a => !existingSet.has(a.url)).slice(0, 300);
+    console.log(`To validate (new only): ${toValidate.length}`);
+
+    // Parallel validate (concurrency 8 to stay under memory limit), dedup by final URL.
     const validated: any[] = [];
     const finalSeen = new Set<string>();
-    await runWithLimit(collectedArticles, 15, async (a) => {
+    await runWithLimit(toValidate, 8, async (a) => {
       const v = await validateAndFixUrl(a);
       if (!v) return;
       const key = normalizeUrl(v.url);
@@ -497,6 +510,7 @@ Rules:
     });
 
     console.log(`Validated: ${validated.length}`);
+
 
     if (validated.length === 0) {
       return new Response(JSON.stringify({ success: true, upserted: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
