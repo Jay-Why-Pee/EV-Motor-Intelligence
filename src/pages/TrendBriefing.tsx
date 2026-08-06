@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, TrendingUp, ExternalLink, Calendar, Building2, BookOpen, Clock } from "lucide-react";
+import { Loader2, TrendingUp, ExternalLink, Calendar, Building2, BookOpen, Clock, ShieldCheck, Trash2, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { getLinkBlockLabel, isVerifiedHttpUrl } from "@/lib/linkValidation";
@@ -174,7 +175,68 @@ const TrendBriefing = () => {
   const [currentTopic, setCurrentTopic] = useState("");
   const [history, setHistory] = useState<BriefingHistoryItem[]>([]);
   const [selectedCard, setSelectedCard] = useState<BriefingCard | null>(null);
+  const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem("ax_admin") === "true");
+  const [adminPw, setAdminPw] = useState(() => sessionStorage.getItem("ax_admin_pw") || "");
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [pwInput, setPwInput] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const verifyAdmin = async () => {
+    if (!pwInput.trim()) return;
+    setVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-briefing-history", {
+        body: { masterPassword: pwInput, ids: [] },
+      });
+      if (error || data?.error) {
+        toast({ title: "관리자 비밀번호가 올바르지 않습니다", variant: "destructive" });
+        return;
+      }
+      sessionStorage.setItem("ax_admin", "true");
+      sessionStorage.setItem("ax_admin_pw", pwInput);
+      setAdminPw(pwInput);
+      setIsAdmin(true);
+      setAdminOpen(false);
+      setPwInput("");
+      toast({ title: "관리자 모드가 활성화되었습니다" });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const exitAdmin = () => {
+    sessionStorage.removeItem("ax_admin");
+    sessionStorage.removeItem("ax_admin_pw");
+    setIsAdmin(false);
+    setAdminPw("");
+    setSelectedIds([]);
+  };
+
+  const deleteHistory = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    if (!window.confirm(`선택한 ${ids.length}건의 브리핑 기록을 삭제할까요?`)) return;
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-briefing-history", {
+        body: { masterPassword: adminPw, ids },
+      });
+      if (error || data?.error) {
+        toast({ title: "삭제 실패", description: data?.error, variant: "destructive" });
+        return;
+      }
+      toast({ title: `${ids.length}건이 삭제되었습니다` });
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+      await fetchHistory();
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const fetchHistory = async () => {
     const { data, error } = await supabase
@@ -302,19 +364,62 @@ const TrendBriefing = () => {
         {/* History */}
         {history.length > 0 && (
           <div className="space-y-8">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Clock className="w-5 h-5 text-muted-foreground" />
               <h2 className="text-xl font-semibold">이전 브리핑 기록</h2>
               <span className="text-sm text-muted-foreground">(최대 10건)</span>
+              <div className="ml-auto flex items-center gap-2">
+                {isAdmin ? (
+                  <>
+                    <Badge variant="outline" className="gap-1">
+                      <ShieldCheck className="w-3 h-3" /> 관리자
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={selectedIds.length === 0 || deleting}
+                      onClick={() => deleteHistory(selectedIds)}
+                    >
+                      {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />}
+                      선택 삭제 {selectedIds.length > 0 && `(${selectedIds.length})`}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={exitAdmin}>
+                      <X className="w-4 h-4 mr-1" /> 종료
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => setAdminOpen(true)}>
+                    <ShieldCheck className="w-4 h-4 mr-1" /> 관리자
+                  </Button>
+                )}
+              </div>
             </div>
             {history
               .filter((item) => !(currentCards.length > 0 && item.topic === currentTopic && history.indexOf(item) === 0))
               .map((item) => (
                 <div key={item.id} className="space-y-3">
                   <div className="flex items-center gap-2">
+                    {isAdmin && (
+                      <Checkbox
+                        checked={selectedIds.includes(item.id)}
+                        onCheckedChange={() => toggleSelect(item.id)}
+                        aria-label="브리핑 기록 선택"
+                      />
+                    )}
                     <h3 className="text-base font-medium">"{item.topic}"</h3>
                     <span className="text-xs text-muted-foreground">{formatDate(item.created_at)}</span>
                     <span className="text-xs text-muted-foreground">— {item.cards.length}개 카드</span>
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto text-destructive hover:text-destructive"
+                        disabled={deleting}
+                        onClick={() => deleteHistory([item.id])}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                   <BriefingCardGrid cards={item.cards} onCardClick={setSelectedCard} />
                 </div>
@@ -330,6 +435,28 @@ const TrendBriefing = () => {
       </main>
 
       <CardDetailDialog card={selectedCard} onClose={() => setSelectedCard(null)} />
+
+      <Dialog open={adminOpen} onOpenChange={setAdminOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>관리자 인증</DialogTitle>
+            <DialogDescription>관리자 비밀번호를 입력하면 브리핑 기록을 선택 삭제할 수 있습니다.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              type="password"
+              value={pwInput}
+              onChange={(e) => setPwInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && verifyAdmin()}
+              placeholder="관리자 비밀번호"
+              autoFocus
+            />
+            <Button className="w-full" onClick={verifyAdmin} disabled={verifying || !pwInput.trim()}>
+              {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : "확인"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Footer />
     </div>

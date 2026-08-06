@@ -38,3 +38,7 @@ verify_jwt = false
 
 [functions.reclassify-news]
 verify_jwt = false
+
+[functions.manage-briefing-history]
+verify_jwt = false
+
