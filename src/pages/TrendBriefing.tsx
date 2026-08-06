@@ -436,6 +436,28 @@ const TrendBriefing = () => {
 
       <CardDetailDialog card={selectedCard} onClose={() => setSelectedCard(null)} />
 
+      <Dialog open={adminOpen} onOpenChange={setAdminOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>관리자 인증</DialogTitle>
+            <DialogDescription>관리자 비밀번호를 입력하면 브리핑 기록을 선택 삭제할 수 있습니다.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              type="password"
+              value={pwInput}
+              onChange={(e) => setPwInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && verifyAdmin()}
+              placeholder="관리자 비밀번호"
+              autoFocus
+            />
+            <Button className="w-full" onClick={verifyAdmin} disabled={verifying || !pwInput.trim()}>
+              {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : "확인"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Footer />
     </div>
   );
