@@ -364,19 +364,62 @@ const TrendBriefing = () => {
         {/* History */}
         {history.length > 0 && (
           <div className="space-y-8">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Clock className="w-5 h-5 text-muted-foreground" />
               <h2 className="text-xl font-semibold">이전 브리핑 기록</h2>
               <span className="text-sm text-muted-foreground">(최대 10건)</span>
+              <div className="ml-auto flex items-center gap-2">
+                {isAdmin ? (
+                  <>
+                    <Badge variant="outline" className="gap-1">
+                      <ShieldCheck className="w-3 h-3" /> 관리자
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={selectedIds.length === 0 || deleting}
+                      onClick={() => deleteHistory(selectedIds)}
+                    >
+                      {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />}
+                      선택 삭제 {selectedIds.length > 0 && `(${selectedIds.length})`}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={exitAdmin}>
+                      <X className="w-4 h-4 mr-1" /> 종료
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => setAdminOpen(true)}>
+                    <ShieldCheck className="w-4 h-4 mr-1" /> 관리자
+                  </Button>
+                )}
+              </div>
             </div>
             {history
               .filter((item) => !(currentCards.length > 0 && item.topic === currentTopic && history.indexOf(item) === 0))
               .map((item) => (
                 <div key={item.id} className="space-y-3">
                   <div className="flex items-center gap-2">
+                    {isAdmin && (
+                      <Checkbox
+                        checked={selectedIds.includes(item.id)}
+                        onCheckedChange={() => toggleSelect(item.id)}
+                        aria-label="브리핑 기록 선택"
+                      />
+                    )}
                     <h3 className="text-base font-medium">"{item.topic}"</h3>
                     <span className="text-xs text-muted-foreground">{formatDate(item.created_at)}</span>
                     <span className="text-xs text-muted-foreground">— {item.cards.length}개 카드</span>
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto text-destructive hover:text-destructive"
+                        disabled={deleting}
+                        onClick={() => deleteHistory([item.id])}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                   <BriefingCardGrid cards={item.cards} onCardClick={setSelectedCard} />
                 </div>
