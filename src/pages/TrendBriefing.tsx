@@ -175,7 +175,68 @@ const TrendBriefing = () => {
   const [currentTopic, setCurrentTopic] = useState("");
   const [history, setHistory] = useState<BriefingHistoryItem[]>([]);
   const [selectedCard, setSelectedCard] = useState<BriefingCard | null>(null);
+  const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem("ax_admin") === "true");
+  const [adminPw, setAdminPw] = useState(() => sessionStorage.getItem("ax_admin_pw") || "");
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [pwInput, setPwInput] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const verifyAdmin = async () => {
+    if (!pwInput.trim()) return;
+    setVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-briefing-history", {
+        body: { masterPassword: pwInput, ids: [] },
+      });
+      if (error || data?.error) {
+        toast({ title: "관리자 비밀번호가 올바르지 않습니다", variant: "destructive" });
+        return;
+      }
+      sessionStorage.setItem("ax_admin", "true");
+      sessionStorage.setItem("ax_admin_pw", pwInput);
+      setAdminPw(pwInput);
+      setIsAdmin(true);
+      setAdminOpen(false);
+      setPwInput("");
+      toast({ title: "관리자 모드가 활성화되었습니다" });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const exitAdmin = () => {
+    sessionStorage.removeItem("ax_admin");
+    sessionStorage.removeItem("ax_admin_pw");
+    setIsAdmin(false);
+    setAdminPw("");
+    setSelectedIds([]);
+  };
+
+  const deleteHistory = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    if (!window.confirm(`선택한 ${ids.length}건의 브리핑 기록을 삭제할까요?`)) return;
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-briefing-history", {
+        body: { masterPassword: adminPw, ids },
+      });
+      if (error || data?.error) {
+        toast({ title: "삭제 실패", description: data?.error, variant: "destructive" });
+        return;
+      }
+      toast({ title: `${ids.length}건이 삭제되었습니다` });
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+      await fetchHistory();
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const fetchHistory = async () => {
     const { data, error } = await supabase
